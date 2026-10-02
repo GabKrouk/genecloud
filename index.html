@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GeneCloud — online program</title>
+<meta name="description" content="GeneCloud: semantic terms over-represented in the descriptions of a list of Arabidopsis genes. Runs entirely in your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#ffffff; --fg:#1d232b; --sub:#5d6670; --rule:#dfe3e7; --soft:#f5f7f6; --card:#ffffff;
+  --link:#2a6db0; --leaf:#1f6b2e; --leaf2:#3c9a3f; --accent:#b0216f; --hi:#fff3bf; --err:#b42318;
+  --serif:"Source Serif 4",Georgia,"Times New Roman",serif; --sans:"Source Sans 3",system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1311; --fg:#e8ece9; --sub:#9aa5a0; --rule:#26302b; --soft:#141b18; --card:#121916;
+  --link:#7fb6ea; --hi:#4a3f12; --err:#ff8a7a; }}
+:root[data-theme="dark"]{--bg:#0e1311;--fg:#e8ece9;--sub:#9aa5a0;--rule:#26302b;--soft:#141b18;--card:#121916;--link:#7fb6ea;--hi:#4a3f12;--err:#ff8a7a}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg)}
+body{font:16px/1.55 var(--sans)}
+a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+
+/* banner: leaves + binary digits, after the 2015 GeneCloud page */
+.banner{position:relative;height:132px;overflow:hidden;background:
+  radial-gradient(60px 40px at 12% 70%,#4caf50 0,transparent 70%),
+  radial-gradient(90px 55px at 30% 30%,#2e7d32 0,transparent 72%),
+  radial-gradient(120px 70px at 52% 80%,#43a047 0,transparent 70%),
+  radial-gradient(80px 50px at 70% 35%,#66bb6a 0,transparent 70%),
+  radial-gradient(110px 60px at 88% 65%,#2e7d32 0,transparent 70%),
+  linear-gradient(100deg,#0b1f10,#123d1b 40%,#0d2a14)}
+.banner pre{position:absolute;inset:0;margin:0;padding:10px 16px;color:#b7f5b0;opacity:.35;font:600 13px/1.45 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.35em;white-space:pre;pointer-events:none}
+.banner .title{position:absolute;left:0;right:0;bottom:14px;max-width:1080px;margin:0 auto;padding:0 16px;color:#fff}
+.banner h1{margin:0;font:700 40px/1.05 var(--serif);letter-spacing:.01em;text-shadow:0 2px 12px rgba(0,0,0,.45)}
+.banner h1 span{font-weight:400;font-style:italic;font-size:.55em;opacity:.9;margin-left:.45em}
+nav{border-bottom:1px solid var(--rule)}
+nav .in{max-width:1080px;margin:0 auto;padding:8px 16px;display:flex;gap:22px;flex-wrap:wrap;font:600 13px var(--sans);text-transform:uppercase;letter-spacing:.06em}
+nav a{color:var(--fg)}nav a.cur{color:var(--leaf2)}
+nav .sp{flex:1}
+#theme{background:none;border:1px solid var(--rule);color:var(--sub);border-radius:6px;font:600 12px var(--sans);padding:2px 8px;cursor:pointer}
+
+main{max-width:1080px;margin:0 auto;padding:18px 16px 60px}
+h2{font:600 26px/1.2 var(--serif);margin:10px 0 4px}
+h3{font:600 19px/1.3 var(--serif);margin:28px 0 8px}
+.lead{font:400 17px/1.35 var(--serif);color:var(--sub);margin:0 0 14px}
+p.intro{max-width:78ch;margin:0 0 18px}
+.note{font-size:13.5px;color:var(--sub)}
+
+/* form, as a two-column table like the original */
+form{border:1px solid var(--rule);background:var(--soft);border-radius:8px;padding:6px 18px 14px}
+.row{display:grid;grid-template-columns:230px 1fr;gap:6px 18px;padding:11px 0;border-bottom:1px dashed var(--rule)}
+.row:last-of-type{border-bottom:0}
+.row>label.k,.row>.k{font-weight:600;padding-top:3px}
+.row .k small{display:block;font-weight:400;color:var(--sub);font-size:12.5px;line-height:1.35;margin-top:2px}
+textarea{width:100%;min-height:170px;resize:vertical;font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;color:var(--fg);background:var(--card);border:1px solid var(--rule);border-radius:6px;padding:8px}
+textarea:focus,select:focus,input:focus{outline:2px solid var(--leaf2);outline-offset:1px}
+.opts{display:flex;flex-wrap:wrap;gap:6px 20px}
+.opts label{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.opts .n{color:var(--sub);font-size:13px}
+.examples{margin-top:6px;font-size:14px}
+.examples button{all:unset;color:var(--link);cursor:pointer}.examples button:hover{text-decoration:underline}
+.count{font-size:13px;color:var(--sub);margin-top:4px}
+.buttons{display:flex;gap:10px;align-items:center;padding-top:14px}
+button.main,button.sec{font:600 15px var(--sans);border-radius:6px;padding:8px 22px;cursor:pointer;border:1px solid transparent}
+button.main{background:var(--leaf);color:#fff}button.main:hover{background:var(--leaf2)}
+button.main:disabled{opacity:.55;cursor:wait}
+button.sec{background:transparent;color:var(--fg);border-color:var(--rule)}
+.err{color:var(--err);font-weight:600}
+#status{font-size:14px;color:var(--sub)}
+#bgcustom{display:none;margin-top:8px;min-height:90px}
+
+/* results */
+#results{display:none}
+.summary{margin:6px 0 10px;font-size:15px}
+.cloudbox{border:1px solid var(--rule);border-radius:8px;overflow:hidden;position:relative}
+.cloudbox svg{display:block;width:100%;height:auto}
+.cloudbox text{cursor:pointer}
+svg.sel text{opacity:.18}svg.sel text.on{opacity:1}
+.legend{display:flex;flex-wrap:wrap;gap:8px 28px;align-items:flex-end;justify-content:space-between;font-size:12.5px;color:var(--sub);margin:8px 2px 0}
+.ramp{width:220px;height:10px;border-radius:2px;border:1px solid var(--rule)}
+.ramp+div{display:flex;justify-content:space-between;width:220px}
+.sizekey span{font-weight:700;color:var(--sub);margin-right:14px;line-height:1}
+.dl{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}
+.dl button{font:600 13px var(--sans);background:var(--card);color:var(--fg);border:1px solid var(--rule);border-radius:6px;padding:5px 12px;cursor:pointer}
+.dl button:hover{border-color:var(--leaf2)}
+#tip{position:fixed;z-index:20;pointer-events:none;display:none;background:var(--card);color:var(--fg);border:1px solid var(--rule);border-radius:8px;padding:8px 11px;font-size:13px;max-width:360px;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+.pill{display:inline-block;font-size:11px;border:1px solid var(--rule);border-radius:4px;padding:0 5px;color:var(--sub);vertical-align:1px}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tall{max-height:560px;overflow-y:auto;border:1px solid var(--rule);border-radius:6px}
+.tall thead th{position:sticky;top:0;background:var(--bg)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:5px 9px;border-bottom:1px solid var(--rule);text-align:left;vertical-align:top}
+thead th{font-weight:600;color:var(--sub);white-space:nowrap;cursor:pointer;user-select:none;border-bottom:2px solid var(--rule)}
+thead th.fdr{color:var(--err)}
+td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td a.term{font-weight:600}
+tr.trend td{color:var(--sub)}
+tr.on td{background:var(--hi)}
+#locus table{font-size:13px}#locus td{min-width:90px}
+#locus td.long{min-width:240px;max-width:460px}#locus td.long:empty::after{content:"—";color:var(--sub)}
+mark{background:var(--hi);color:inherit;padding:0 1px;border-radius:2px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--rule);margin:26px 0 0}
+.tabs button{font:600 14px var(--sans);background:none;border:0;border-bottom:3px solid transparent;color:var(--sub);padding:8px 12px;cursor:pointer}
+.tabs button.on{color:var(--fg);border-bottom-color:var(--leaf2)}
+.panel{display:none;padding-top:8px}.panel.on{display:block}
+footer{border-top:1px solid var(--rule);margin-top:40px;padding-top:16px;font-size:13.5px;color:var(--sub)}
+footer p{margin:0 0 8px;max-width:95ch}
+.loader{display:inline-block;width:12px;height:12px;border:2px solid var(--rule);border-top-color:var(--leaf2);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-1px;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (max-width:720px){
+  .row{grid-template-columns:1fr}.banner h1{font-size:31px}.banner h1 span{display:block;margin:4px 0 0}
+  nav .in{gap:14px}
+}
+</style>
+</head>
+<body>
+<header class="banner" aria-hidden="false">
+  <pre id="bits"></pre>
+  <div class="title"><h1>GeneCloud<span>semantic enrichment in lists of gene descriptions</span></h1></div>
+</header>
+<nav><div class="in">
+  <a href="#" class="cur">Online program</a>
+  <a href="#how">How it works</a>
+  <a href="https://github.com/GabKrouk/genecloud">Python package</a>
+  <a href="https://doi.org/10.1016/j.molp.2015.02.005">Paper (2015)</a>
+  <span class="sp"></span>
+  <button id="theme" type="button" title="Switch light / dark">light / dark</button>
+</div></nav>
+
+<main>
+  <h2>Online program</h2>
+  <p class="lead">Arabidopsis GeneCloud — semantic terms over-represented in the description of a gene list</p>
+  <p class="intro">Paste a list of Arabidopsis genes. GeneCloud reads what is written about every gene — TAIR curator
+  summaries and descriptions, mutant phenotypes, UniProt function, NCBI Gene and Gene Ontology — and returns the
+  words and phrases that are significantly more frequent in your list than in the background, as a word cloud in
+  which <b>the size of a word is its statistical enrichment</b>. It complements GO analysis: it finds vocabulary that
+  no ontology term captures. <span class="note">The analysis runs in your browser: your gene list is never sent anywhere.</span></p>
+
+  <form id="form" autocomplete="off" novalidate>
+    <div class="row">
+      <label class="k" for="genes">Gene list<small>AGI identifiers (AT1G01010, At1g01010.1…), any separator</small></label>
+      <div>
+        <textarea id="genes" spellcheck="false" placeholder="AT1G04240&#10;AT2G23170&#10;AT3G23030&#10;…"></textarea>
+        <div class="count" id="gcount">0 identifiers</div>
+        <div class="examples">Examples from the GeneCloud paper:
+          <button type="button" data-ex="hormone_IAA_up">auxin-induced genes</button> ·
+          <button type="button" data-ex="PHR1_induced">PHR1-induced genes</button> ·
+          <button type="button" data-ex="nitrate_responsive">nitrate-responsive genes</button></div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="k">Background <span class="err">*</span><small>Required: every gene that could have been in your list</small></div>
+      <div>
+        <div class="opts" id="bgopts">
+          <label><input type="radio" name="bg" value="ATH1"> ATH1 microarray <span class="n" data-n="ATH1"></span></label>
+          <label><input type="radio" name="bg" value="protein_coding"> all protein-coding genes <span class="n" data-n="protein_coding"></span></label>
+          <label><input type="radio" name="bg" value="custom"> my own list (e.g. genes detected by RNA-seq)</label>
+        </div>
+        <textarea id="bgcustom" spellcheck="false" placeholder="Paste the background genes (all expressed genes…)"></textarea>
+        <div class="count" id="bgcount"></div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="k">Annotation text</div>
+      <div class="opts">
+        <label><input type="radio" name="preset" value="all" checked> all sources <span class="n">TAIR + UniProt + NCBI + GO names</span></label>
+        <label><input type="radio" name="preset" value="tair"> TAIR only <span class="n">descriptions, curator summaries, phenotypes</span></label>
+        <label><input type="radio" name="preset" value="open"> UniProt + NCBI + GO</label>
+      </div>
+    </div>
+    <div class="row">
+      <div class="k">Concepts</div>
+      <div class="opts">
+        <label><input type="checkbox" name="layer" value="word" checked> words</label>
+        <label><input type="checkbox" name="layer" value="phrase" checked> two-word phrases</label>
+        <label><input type="checkbox" name="layer" value="keyword" checked> UniProt keywords</label>
+        <label><input type="checkbox" name="layer" value="go"> GO terms</label>
+      </div>
+    </div>
+    <div class="row">
+      <div class="k">Keep terms occurring in at least</div>
+      <div class="opts">
+        <label><input type="radio" name="min" value="2" checked> 2 genes</label>
+        <label><input type="radio" name="min" value="3"> 3 genes</label>
+        <label><input type="radio" name="min" value="5"> 5 genes</label>
+      </div>
+    </div>
+    <div class="row">
+      <div class="k">FDR threshold</div>
+      <div class="opts">
+        <label><input type="radio" name="fdr" value="0.05" checked> 5%</label>
+        <label><input type="radio" name="fdr" value="0.01"> 1%</label>
+        <label><input type="radio" name="fdr" value="0.001"> 0.1%</label>
+      </div>
+    </div>
+    <div class="row">
+      <div class="k">p.adjust method</div>
+      <div class="opts">
+        <label><input type="radio" name="adjust" value="BH" checked> Benjamini &amp; Hochberg</label>
+        <label><input type="radio" name="adjust" value="BY"> Benjamini &amp; Yekutieli <span class="n">(any dependence, more conservative)</span></label>
+      </div>
+    </div>
+    <div class="row">
+      <div class="k">Cloud<small>can be changed after the analysis</small></div>
+      <div><div class="opts">
+        <label><input type="checkbox" id="showTrend" checked> show nominal trends in grey <span class="n">(uncorrected P ≤ 0.01)</span></label>
+        <label><input type="checkbox" id="showCounts"> term(count|fold) labels, as in 2015</label>
+        <label><input type="checkbox" id="darkCloud"> black background</label>
+      </div>
+      <div class="opts" style="margin-top:6px">
+        <span>word size:</span>
+        <label><input type="radio" name="sizeby" id="sizeFdr" value="fdr" checked> statistical enrichment (−log10 FDR)</label>
+        <label><input type="radio" name="sizeby" id="sizeFold" value="fold"> fold enrichment <span class="n">(better for long lists)</span></label>
+      </div></div>
+    </div>
+    <div class="buttons">
+      <button class="main" id="submit" type="submit">Submit</button>
+      <button class="sec" type="reset" id="reset">Reset</button>
+      <span id="status"></span>
+    </div>
+  </form>
+
+  <section id="results" aria-live="polite">
+    <h3 id="rtitle">Results</h3>
+    <div class="summary" id="summary"></div>
+    <div class="cloudbox" id="cloud"></div>
+    <div class="legend">
+      <div class="sizekey" id="sizekey"></div>
+      <div><div class="ramp" id="ramp"></div><div id="rampticks"></div><div style="text-align:center;width:220px">fold enrichment</div></div>
+    </div>
+    <div class="dl">
+      <button type="button" id="dlsvg">Cloud (SVG)</button>
+      <button type="button" id="dlpng">Cloud (PNG)</button>
+      <button type="button" id="dltsv">Table (TSV)</button>
+      <button type="button" id="dlfa">Gene lists per term (FASTA-like)</button>
+      <button type="button" id="share">Copy link to this analysis</button>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="on" data-p="ptable" role="tab">Over-represented terms</button>
+      <button data-p="plocus" role="tab">Genes with a term</button>
+      <button data-p="pgenes" role="tab">Your genes</button>
+    </div>
+    <div class="panel on" id="ptable"><div class="scroll tall"><table id="terms"><thead><tr>
+      <th data-s="display">word</th><th data-s="layer">type</th><th data-s="k" class="n">count</th><th data-s="K" class="n">background</th>
+      <th data-s="fold" class="n">enrich. ratio</th><th data-s="p" class="n">p-value</th><th data-s="fdr" class="n fdr">FDR</th><th>merged with</th>
+    </tr></thead><tbody></tbody></table></div>
+    <p class="note">Click a term to list the genes that carry it, with their annotation (the term is highlighted). Click a column to sort.</p></div>
+    <div class="panel" id="plocus"><div id="locus" class=""><p class="note">Click a word in the cloud or in the table.</p></div></div>
+    <div class="panel" id="pgenes"><div class="scroll tall"><table id="glist"><thead><tr><th>locus</th><th>symbol</th><th>short description</th></tr></thead><tbody></tbody></table></div>
+    <p class="note" id="missing"></p></div>
+  </section>
+
+  <section id="how">
+    <h3>How it works</h3>
+    <p class="intro">For every gene, the annotation texts are reduced to a set of concepts: lemmatised words
+    (<i>transporters</i> → <i>transporter</i>), two-word phrases that co-occur far more than expected genome-wide
+    (<i>phosphate starvation</i>, <i>high affinity</i>), UniProt keywords and, optionally, GO terms with their
+    ancestors. A gene counts once per concept. Genes that are not annotated in the chosen concepts are left out of
+    both the list and the background. For a concept carried by <i>k</i> of your <i>n</i> genes and <i>K</i> of the
+    <i>N</i> background genes, P is the hypergeometric probability of seeing at least <i>k</i>. P values are
+    corrected (Benjamini–Hochberg, or Benjamini–Yekutieli) over every concept that is testable on this background
+    (carried by at least the minimum number of genes, and by at most 25% of the background), whether or not it
+    occurs in your list; concepts carried by fewer genes of your list than the minimum enter with P = 1. All
+    probabilities are computed in log scale, so very small values (below 10⁻³⁰⁰) stay exact. Concepts carried by
+    the same genes are merged into one word (the most significant); a lone word is shown with the phrase that at
+    least 90% of its genes share. Word size grows linearly with −log10 FDR (or log2 fold enrichment), colour =
+    fold enrichment; grey words are nominal trends (uncorrected P ≤ 0.01), leads rather than findings.
+    The same computation is implemented in the Python package, and the two give identical tables.</p>
+  </section>
+
+  <footer>
+    <p><b>Cite:</b> Krouk G, Carré C, Fizames C, Gojon A, Ruffel S, Lacombe B (2015) GeneCloud reveals semantic
+    enrichment in lists of gene descriptions. <i>Mol. Plant</i> 8:971–973.
+    <a href="https://doi.org/10.1016/j.molp.2015.02.005">doi:10.1016/j.molp.2015.02.005</a> — and the
+    <a href="https://github.com/GabKrouk/genecloud">GeneCloud 2 repository</a>.</p>
+    <p id="annot">Annotation: …</p>
+    <p>Data: TAIR public data release (CC BY 4.0) · UniProtKB (CC BY 4.0) · Gene Ontology (CC BY 4.0) · NCBI Gene (public domain).
+    Code: MIT licence.</p>
+  </footer>
+</main>
+<div id="tip" role="tooltip"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
