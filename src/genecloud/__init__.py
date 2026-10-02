@@ -2,6 +2,6 @@
 
 Successor of GeneCloud (G. Krouk, 2013). See README.md.
 """
-__version__ = "2.0.1"
+__version__ = "2.1.0"
 
 from .core import CloudResult, GeneCloud  # noqa: E402,F401

@@ -66,7 +66,10 @@ def write_html(result, path, gc=None, title: str = "GeneCloud", width: int = 100
     if gc is not None:
         for g in result.study:
             a = gc.genes.get(g)
-            desc = (a.protein_names[0] if a and a.protein_names else (a.description if a else "")) or ""
+            desc = ""
+            if a:
+                desc = (a.tair_description[0] if getattr(a, "tair_description", None) else
+                        a.protein_names[0] if a.protein_names else a.description) or ""
             grow += f"<tr data-g='{g}'><td>{g}</td><td>{html.escape(gc.symbol(g))}</td><td>{html.escape(desc)}</td></tr>"
     n, N = len(result.study), result.background_size
     miss = f" · not annotated / not in background: {', '.join(result.missing)}" if result.missing else ""

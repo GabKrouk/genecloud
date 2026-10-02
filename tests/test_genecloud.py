@@ -29,6 +29,19 @@ def test_build_and_load(annotation):
     g = genes[gid(0)]
     assert "nitrate" in g.function.lower() and "PubMed" not in g.function
     assert "Transport" in g.keywords and g.go
+    # TAIR release: curator summary merged across gene models, phenotypes mapped through symbols
+    assert g.tair_summary.count("chlorate") == 1 and g.tair_computational == ["protein 0"]
+    assert g.phenotypes == ["chlorate resistant seedlings"] and "CHL1" in g.synonyms + [g.symbol]
+    assert g.biotype == "protein_coding"
+
+
+def test_text_presets(annotation):
+    from genecloud import GeneCloud
+    tair = GeneCloud(annotation, layers=("word",), text_fields="tair", cache=False)
+    assert "w:chlorate" in tair.concepts[gid(0)] and "w:chaperone" not in tair.concepts.get(gid(6), set())
+    res = tair.run(NITRATE_SET, BG)
+    sig = res.table[res.table.status == "significant"]
+    assert "chlorate" in set(sig.label)                     # possibly merged under another representative
 
 
 def test_enrichment_finds_nitrate(engine):
@@ -51,7 +64,7 @@ def test_redundancy_merged(engine):
 
 def test_min_genes_blocks_single_gene_words(engine):
     res = engine.run([gid(0), gid(20)], BG)
-    assert (res.table[res.table.k < 2].fdr == 1).all()
+    assert (res.table[res.table.k < 2].status == "").all()
 
 
 def test_background_restricts_universe(engine):
@@ -100,3 +113,42 @@ def test_background_is_mandatory(engine, annotation, tmp_path):
     f.write_text("\n".join(NITRATE_SET))
     with pytest.raises(SystemExit):
         main(["run", str(f), "-a", str(annotation), "-o", str(tmp_path / "out")])
+
+
+def test_hypergeometric_and_bh_exact():
+    """P values against exact enumeration with integers; BH against a direct implementation."""
+    from math import comb
+    from scipy.stats import hypergeom
+    from genecloud.core import bh
+    import numpy as np
+    for N, K, n, k in [(50, 7, 10, 3), (200, 20, 15, 6), (21000, 107, 2116, 48), (30, 30, 5, 5)]:
+        exact = sum(comb(K, i) * comb(N - K, n - i) for i in range(k, min(K, n) + 1)) / comb(N, n)
+        assert abs(hypergeom.sf(k - 1, N, K, n) - exact) <= 1e-12 + 1e-9 * exact
+    p = np.array([0.001, 0.04, 0.03, 0.2, 0.0005])
+    m = 8                                      # 3 more hypotheses with P = 1
+    full = np.concatenate([p, np.ones(3)])
+    o = np.argsort(full)
+    ref = np.empty(m)
+    for r in range(m):                         # q_(i) = min_{j>=i} p_(j) m / j
+        ref[o[r]] = min(1, min(full[o[j]] * m / (j + 1) for j in range(r, m)))
+    assert np.allclose(bh(p, m), ref[:5])
+
+
+def test_log_space_adjustment():
+    import numpy as np
+    from genecloud.core import bh, log10_adjust, log10_hypergeom_sf
+    from scipy.stats import hypergeom
+    p = np.array([1e-5, 0.003, 0.04, 0.2, 0.5, 1e-9])
+    assert np.allclose(10 ** log10_adjust(np.log10(p), 20), bh(p, 20))
+    cm = sum(1 / i for i in range(1, 21))
+    assert np.allclose(10 ** log10_adjust(np.log10(p), 20, "BY"), np.minimum(1, bh(p, 20) * cm))
+    # far below the double-precision range, and consistent with scipy above it
+    assert log10_hypergeom_sf(400, 30000, 500, 600) < -400
+    assert abs(log10_hypergeom_sf(20, 20000, 100, 400) - np.log10(hypergeom.sf(19, 20000, 100, 400))) < 1e-9
+
+
+def test_family_is_background_only(engine):
+    """The number of hypotheses depends on the background, not on the study list."""
+    a = engine.run(NITRATE_SET, BG)
+    b = engine.run([gid(i) for i in range(6, 10)], BG)
+    assert a.params["n_hypotheses"] == b.params["n_hypotheses"]

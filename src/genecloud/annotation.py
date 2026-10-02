@@ -1,7 +1,9 @@
 """Build a modern, per-gene annotation table from openly licensed sources.
 
 Sources (see species.py): NCBI Gene (symbols, descriptions, nomenclature names), UniProtKB (protein names,
-curated FUNCTION text, keywords, protein families) and the Gene Ontology (GAF annotations + ontology).
+curated FUNCTION text, keywords, protein families), the Gene Ontology (GAF annotations + ontology) and, for
+Arabidopsis, the latest TAIR public data release (Araport11 short descriptions, TAIR curator summaries,
+computational descriptions, gene symbols and full names, mutant phenotypes, gene types).
 
 The result is one JSON record per gene, stored as gzipped JSON lines, with a small metadata header.
 """
@@ -14,12 +16,13 @@ import io
 import json
 import re
 import sys
+import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from .ontology import Ontology
-from .species import GO_OBO_URL, SPECIES, Species
+from .species import GO_OBO_URL, SPECIES, TAIR_API, TAIR_GENE_TYPE, TAIR_RELEASE_FILES, Species
 
 csv.field_size_limit(sys.maxsize)
 
@@ -28,6 +31,13 @@ SOURCE_FILES = {
     "obo": "go-basic.obo.gz",
     "gene_info": "gene_info.gz",
     "uniprot": "uniprot.tsv.gz",
+}
+TAIR_SOURCE_FILES = {
+    "tair_descriptions": "tair_functional_descriptions.txt.gz",
+    "tair_aliases": "tair_gene_aliases.txt.gz",
+    "tair_phenotypes": "tair_germplasm_phenotypes.txt.gz",
+    "tair_alleles": "tair_allele_phenotypes.txt.gz",
+    "gene_type": "araport11_gene_type.txt.gz",
 }
 
 
@@ -44,6 +54,11 @@ class Gene:
     families: list = field(default_factory=list)       # UniProt protein families
     go: list = field(default_factory=list)             # direct GO annotations (resolved ids)
     reviewed: bool = False                             # has a Swiss-Prot (reviewed) entry
+    tair_description: list = field(default_factory=list)    # Araport11 short descriptions (all gene models)
+    tair_summary: str = ""                             # TAIR curator summary (literature-based, the richest text)
+    tair_computational: list = field(default_factory=list)  # Araport11 computational descriptions
+    phenotypes: list = field(default_factory=list)     # TAIR mutant phenotypes (germplasm / allele)
+    biotype: str = ""                                  # Araport11 gene type (protein_coding, lncRNA, ...)
 
 
 # --------------------------------------------------------------------------------------------- download
@@ -67,7 +82,53 @@ def download(species: str | Species = "arabidopsis", outdir: str | Path = "genec
         if not data[:2] == b"\x1f\x8b":                    # keep everything gzipped on disk
             data = gzip.compress(data)
         p.write_bytes(data)
+    if sp.tair:
+        paths.update(download_tair(outdir, overwrite=overwrite))
     return paths
+
+
+def _get(url: str, timeout: int = 600) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": "genecloud/2"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
+def latest_tair_release() -> tuple[str, dict[str, str]]:
+    """Find the most recent TAIR public data release. Returns (folder, {kind: file path})."""
+    listing = json.loads(_get(f"{TAIR_API}/list?dir=Public_Data_Releases", 120))
+    releases = sorted(k for k in listing if k.startswith("TAIR_Data_"))
+    for rel in reversed(releases):
+        files = {name: v["path"] for name, v in listing[rel].items() if isinstance(v, dict) and v.get("type") == "file"}
+        found = {}
+        for kind, pat in TAIR_RELEASE_FILES.items():
+            hit = sorted(n for n in files if re.fullmatch(pat, n))
+            if hit:
+                found[kind] = files[hit[-1]]
+        if "tair_descriptions" in found:
+            return rel, found
+    raise RuntimeError("no TAIR public data release with functional descriptions found")
+
+
+def download_tair(outdir: str | Path, overwrite: bool = False) -> dict[str, Path]:
+    """Download the latest TAIR public data release files (CC BY 4.0)."""
+    outdir = Path(outdir)
+    paths = {k: outdir / v for k, v in TAIR_SOURCE_FILES.items()}
+    if all(p.exists() for p in paths.values()) and not overwrite:
+        return paths
+    rel, found = latest_tair_release()
+    found["gene_type"] = TAIR_GENE_TYPE
+    print(f"[genecloud] TAIR public data release: {rel}", file=sys.stderr)
+    for kind, remote in found.items():
+        p = paths[kind]
+        if p.exists() and not overwrite:
+            continue
+        print(f"[genecloud] downloading {kind}: {remote}", file=sys.stderr)
+        data = _get(f"{TAIR_API}/download?filePath={urllib.parse.quote(remote)}")
+        if not data[:2] == b"\x1f\x8b":
+            data = gzip.compress(data)
+        p.write_bytes(data)
+    (outdir / "tair_release.txt").write_text(rel + "\n")
+    return {k: p for k, p in paths.items() if p.exists()}
 
 
 # ------------------------------------------------------------------------------------------------ parse
@@ -177,20 +238,117 @@ def parse_gaf(path: Path, sp: Species, genes: dict[str, Gene], onto: Ontology) -
             g.names.append(f[9])
 
 
+_SOURCE_TAG = re.compile(r"\s*;?\s*\(source:[^)]*\)", re.I)
+_NULL = {"", "NULL", "null", "-", "NA"}
+
+
+def _tair_rows(path: Path):
+    rd = csv.reader(_open_text(path), delimiter="\t")
+    header = [h.strip().lower() for h in next(rd)]
+    for row in rd:
+        yield dict(zip(header, row))
+
+
+def _locus(name: str, sp: Species, symbol_to_agi: dict[str, str]) -> str | None:
+    m = sp.id_pattern.fullmatch(name.strip().split(".")[0]) if name else None
+    if m:
+        return sp.normalise(m.group(0))
+    return symbol_to_agi.get(name.strip().upper())
+
+
+def parse_tair_aliases(path: Path, sp: Species, genes: dict[str, Gene]) -> dict[str, str]:
+    """Symbols and full names. Returns {SYMBOL: AGI} for symbols that point to a single locus."""
+    owners: dict[str, set] = {}
+    for r in _tair_rows(path):
+        gid = _locus(r.get("locus_name", ""), sp, {})
+        if not gid:
+            continue
+        g = genes.setdefault(gid, Gene(gid))
+        sym, full = (r.get("symbol") or "").strip(), (r.get("full_name") or "").strip()
+        if sym not in _NULL and not sp.id_pattern.fullmatch(sym):
+            owners.setdefault(sym.upper(), set()).add(gid)
+            if not g.symbol:
+                g.symbol = sym
+            elif sym != g.symbol and sym not in g.synonyms:
+                g.synonyms.append(sym)
+        if full not in _NULL and full not in g.names:
+            g.names.append(full)
+    return {s: next(iter(v)) for s, v in owners.items() if len(v) == 1}
+
+
+def parse_tair_descriptions(path: Path, sp: Species, genes: dict[str, Gene]) -> None:
+    """Araport11 functional descriptions, one row per gene model: merged per locus."""
+    for r in _tair_rows(path):
+        gid = _locus(r.get("name", ""), sp, {})
+        if not gid:
+            continue
+        g = genes.setdefault(gid, Gene(gid))
+        short = (r.get("short_description") or "").strip()
+        if short not in _NULL and short not in g.tair_description:
+            g.tair_description.append(short)
+        summ = (r.get("curator_summary") or "").strip()
+        if summ not in _NULL and summ not in g.tair_summary:
+            g.tair_summary = (g.tair_summary + " " + summ).strip()
+        comp = _SOURCE_TAG.sub("", (r.get("computational_description") or "")).strip(" ;")
+        if comp not in _NULL and comp not in g.tair_computational:
+            g.tair_computational.append(comp)
+        gtype = (r.get("gene_model_type") or "").strip()
+        if gtype not in _NULL and gtype != "unknown" and not g.biotype:
+            g.biotype = gtype
+
+
+def parse_tair_phenotypes(path: Path, sp: Species, genes: dict[str, Gene], symbol_to_agi: dict[str, str],
+                          column: str = "phenotype", max_per_gene: int = 30) -> None:
+    for r in _tair_rows(path):
+        gid = _locus(r.get("locus_name", ""), sp, symbol_to_agi)
+        if not gid or gid not in genes:
+            continue
+        ph = re.sub(r"\s+", " ", (r.get(column) or "")).strip()
+        g = genes[gid]
+        if ph not in _NULL and ph not in g.phenotypes and len(g.phenotypes) < max_per_gene:
+            g.phenotypes.append(ph)
+
+
+def parse_gene_type(path: Path, sp: Species, genes: dict[str, Gene]) -> None:
+    for line in _open_text(path):
+        if line.startswith("!") or not line.strip():
+            continue
+        f = line.rstrip("\n").split("\t")
+        gid = _locus(f[0], sp, {})
+        if gid and len(f) > 1 and gid in genes:
+            genes[gid].biotype = f[1].strip()
+
+
 def build(sources: dict[str, Path] | str | Path, species: str | Species = "arabidopsis",
           out: str | Path = "genecloud_annotation.jsonl.gz") -> Path:
     """Parse the downloaded sources and write the per-gene annotation table."""
     sp = SPECIES[species] if isinstance(species, str) else species
     if not isinstance(sources, dict):
         d = Path(sources)
-        sources = {k: d / v for k, v in SOURCE_FILES.items()}
+        sources = {k: d / v for k, v in {**SOURCE_FILES, **TAIR_SOURCE_FILES}.items() if (d / v).exists()}
+        rel = d / "tair_release.txt"
+        tair_release = rel.read_text().strip() if rel.exists() else None
+    else:
+        tair_release = None
     onto = Ontology.from_obo(sources["obo"])
     genes: dict[str, Gene] = {}
     parse_gene_info(sources["gene_info"], sp, genes)
     parse_uniprot(sources["uniprot"], sp, genes)
     parse_gaf(sources["gaf"], sp, genes, onto)
-    meta = {"genecloud_annotation": 2, "species": sp.name, "taxon": sp.taxon, "built": _dt.date.today().isoformat(),
-            "n_genes": len(genes), "sources": {k: str(Path(v).name) for k, v in sources.items()}}
+    sym2agi: dict[str, str] = {}
+    if "tair_aliases" in sources:
+        sym2agi = parse_tair_aliases(sources["tair_aliases"], sp, genes)
+    if "tair_descriptions" in sources:
+        parse_tair_descriptions(sources["tair_descriptions"], sp, genes)
+    if "tair_phenotypes" in sources:
+        parse_tair_phenotypes(sources["tair_phenotypes"], sp, genes, sym2agi)
+    if "tair_alleles" in sources:
+        parse_tair_phenotypes(sources["tair_alleles"], sp, genes, sym2agi)
+    if "gene_type" in sources:
+        parse_gene_type(sources["gene_type"], sp, genes)
+    meta = {"genecloud_annotation": 3, "species": sp.name, "taxon": sp.taxon, "built": _dt.date.today().isoformat(),
+            "n_genes": len(genes), "sources": {k: str(Path(v).name) for k, v in sources.items()},
+            "tair_release": tair_release}
     out = Path(out)
     with gzip.open(out, "wt", encoding="utf-8") as fh:
         fh.write(json.dumps({"_meta": meta}) + "\n")
@@ -211,7 +369,8 @@ def load(path: str | Path) -> tuple[dict[str, Gene], dict]:
             if "_meta" in rec:
                 meta = rec["_meta"]
                 continue
-            genes[rec["id"]] = Gene(**rec)
+            known = Gene.__dataclass_fields__
+            genes[rec["id"]] = Gene(**{k: v for k, v in rec.items() if k in known})
     return genes, meta
 
 

@@ -30,11 +30,12 @@ def _read_sets(path: str) -> dict[str, list[str]]:
 
 def _engine(args):
     from .core import GeneCloud
-    return GeneCloud(args.annotation, species=args.species, layers=tuple(args.layers.split(",")))
+    return GeneCloud(args.annotation, species=args.species, layers=tuple(args.layers.split(",")),
+                     text_fields=args.text)
 
 
 def _run_opts(args):
-    return dict(min_genes=args.min_genes, fdr=args.fdr, max_concept_frac=args.max_frac,
+    return dict(min_genes=args.min_genes, fdr=args.fdr, max_concept_frac=args.max_frac, adjust=args.adjust,
                 merge_jaccard=args.merge, trend_p=args.trend_p)
 
 
@@ -59,8 +60,9 @@ def cmd_run(args):
         if fmt == "html":
             gc.html(res, f"{out}.html", title=title, theme="light")
         elif fmt in ("pdf", "png", "svg"):
-            gc.plot(res, f"{out}.{fmt}", title=title, theme=args.theme, top=args.top)
-    print(f"{len(res.significant)} significant concepts; {len(res.study)} genes used, {len(res.missing)} missing -> {out}.*")
+            gc.plot(res, f"{out}.{fmt}", title=title, theme=args.theme, top=args.top, size_by=args.size_by)
+    print(f"{len(res.significant)} significant concepts; {len(res.study)} genes used; "
+          f"{len(res.not_in_background)} not in the background, {len(res.not_annotated)} not annotated -> {out}.*")
 
 
 def cmd_compare(args):
@@ -73,7 +75,7 @@ def cmd_compare(args):
     for name, r in results.items():
         stem = f"{out}_{''.join(ch if ch.isalnum() else '_' for ch in name)}"
         r.to_tsv(f"{stem}.tsv")
-        gc.plot(r, f"{stem}.pdf", title=f"GeneCloud · {name}", theme=args.theme, top=args.top)
+        gc.plot(r, f"{stem}.pdf", title=f"GeneCloud · {name}", theme=args.theme, top=args.top, size_by=args.size_by)
         gc.html(r, f"{stem}.html", title=f"GeneCloud · {name}")
     d = draw_compare(results, f"{out}_compare.pdf")
     draw_compare(results, f"{out}_compare.png")
@@ -88,6 +90,15 @@ def cmd_legacy(args):
                          sampling=args.sampling)
     t.to_csv(args.out, sep="\t", index=False)
     print(args.out)
+
+
+def cmd_export_web(args):
+    from .web import export
+    bgs = {}
+    for spec in args.flag or []:
+        name, path = spec.split("=", 1)
+        bgs[name] = _read_ids(path)
+    print(export(args.annotation, args.out, bgs))
 
 
 def main(argv=None):
@@ -109,13 +120,20 @@ def main(argv=None):
                         help="REQUIRED: file with the background genes, i.e. every gene that could have been "
                              "in the list (all expressed genes, all genes on the array...)")
         sp.add_argument("--layers", default="word,phrase,keyword", help="any of word,phrase,keyword,go")
+        sp.add_argument("--text", default="all", choices=["all", "tair", "open"],
+                        help="annotation texts used for words and phrases: all (TAIR + NCBI + UniProt + GO names), "
+                             "tair (TAIR descriptions, curator summaries, phenotypes) or open (no TAIR)")
         sp.add_argument("--fdr", type=float, default=0.05)
+        sp.add_argument("--adjust", default="BH", choices=["BH", "BY"],
+                        help="multiple-testing correction: Benjamini-Hochberg (default) or Benjamini-Yekutieli")
         sp.add_argument("--min-genes", type=int, default=2)
         sp.add_argument("--max-frac", type=float, default=0.25, help="skip concepts carried by > this fraction of background")
         sp.add_argument("--merge", type=float, default=0.75, help="Jaccard threshold to merge redundant concepts")
         sp.add_argument("--trend-p", type=float, default=0.01)
         sp.add_argument("--theme", default="light", choices=["light", "dark"])
         sp.add_argument("--top", type=int, default=60)
+        sp.add_argument("--size-by", default="fdr", choices=["fdr", "fold"],
+                        help="word size: -log10 FDR (default) or log2 fold enrichment (useful for long lists)")
 
     r = sub.add_parser("run", help="one gene list -> cloud (pdf/png/svg), interactive html and table")
     r.add_argument("genes", help="file with gene ids ('-' for stdin)")
@@ -137,6 +155,13 @@ def main(argv=None):
     l.add_argument("--sampling", type=int, default=100)
     l.add_argument("-o", "--out", default="genecloud_legacy.tsv")
     l.set_defaults(func=cmd_legacy)
+
+    w = sub.add_parser("export-web", help="write the data files of the web application (web/data)")
+    w.add_argument("-a", "--annotation", required=True)
+    w.add_argument("-o", "--out", default="web/data")
+    w.add_argument("--flag", action="append", metavar="NAME=FILE",
+                   help="named gene list offered as a background preset in the web app (e.g. ATH1=background_ATH1.txt)")
+    w.set_defaults(func=cmd_export_web)
 
     args = p.parse_args(argv)
     args.func(args)

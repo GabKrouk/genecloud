@@ -46,6 +46,10 @@ previously recently respectively directly indirectly together mainly mostly part
 weakly especially particularly additionally subsequently generally usually normally whereas across another
 along around based known described identified suggested thought believed found named called termed designated
 first second third one two three four five many multiple single several either upon
+mutant mutants mutation mutations allele alleles phenotype phenotypes wild wild-type plant plants line lines
+transgenic knockout overexpression overexpressing overexpressor observed compared comparison exhibit exhibits
+exhibited identical encoding source study studies data analysed analyzed confirmed demonstrated indicate
+indicates indicated suggest suggests reported revealed journal
 """.split())
 # note: 'regulation', 'transport', 'response', 'binding' are kept on purpose: in phrases they are informative.
 ANNOTATION_STOPWORDS = ANNOTATION_STOPWORDS - {"binding"}
@@ -67,7 +71,7 @@ def lemma(w: str) -> str:
         return w
     if w.endswith("ies") and len(w) > 5:
         return w[:-3] + "y"
-    if w.endswith(("ches", "shes", "xes", "zes")):
+    if w.endswith(("ches", "shes", "xes", "sses")):
         return w[:-2]
     if w.endswith("s") and not w.endswith(("is", "as")):
         return w[:-1]

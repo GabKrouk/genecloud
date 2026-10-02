@@ -1,0 +1,85 @@
+{
+ "genecloud_web": 1,
+ "annotation": {
+  "genecloud_annotation": 3,
+  "species": "Arabidopsis thaliana",
+  "taxon": 3702,
+  "built": "2026-10-02",
+  "n_genes": 38355,
+  "sources": {
+   "gaf": "annotations.gaf.gz",
+   "obo": "go-basic.obo.gz",
+   "gene_info": "gene_info.gz",
+   "uniprot": "uniprot.tsv.gz",
+   "tair_descriptions": "tair_functional_descriptions.txt.gz",
+   "tair_aliases": "tair_gene_aliases.txt.gz",
+   "tair_phenotypes": "tair_germplasm_phenotypes.txt.gz",
+   "tair_alleles": "tair_allele_phenotypes.txt.gz",
+   "gene_type": "araport11_gene_type.txt.gz"
+  },
+  "tair_release": "TAIR_Data_20250930"
+ },
+ "n_genes": 37258,
+ "text_presets": {
+  "all": [
+   "names",
+   "description",
+   "tair_description",
+   "tair_summary",
+   "tair_computational",
+   "phenotypes",
+   "protein_names",
+   "function",
+   "families",
+   "go_names"
+  ],
+  "tair": [
+   "names",
+   "tair_description",
+   "tair_summary",
+   "tair_computational",
+   "phenotypes"
+  ],
+  "open": [
+   "names",
+   "description",
+   "protein_names",
+   "function",
+   "families",
+   "go_names"
+  ]
+ },
+ "backgrounds": {
+  "protein_coding": 1,
+  "ATH1": 2
+ },
+ "background_sizes": {
+  "protein_coding": 26575,
+  "ATH1": 21633
+ },
+ "blocks": {
+  "wp_all": {
+   "concepts": 15947,
+   "bytes": 976844
+  },
+  "wp_tair": {
+   "concepts": 11503,
+   "bytes": 552263
+  },
+  "wp_open": {
+   "concepts": 12134,
+   "bytes": 691001
+  },
+  "kw": {
+   "concepts": 466,
+   "bytes": 99126
+  },
+  "go": {
+   "concepts": 6875,
+   "bytes": 632803
+  }
+ },
+ "id_regex": "\\bAT[1-5CM]G\\d{5}\\b",
+ "phrase_min_genes": 5,
+ "phrase_min_npmi": 0.35
+}

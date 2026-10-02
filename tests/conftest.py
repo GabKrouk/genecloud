@@ -69,6 +69,19 @@ def sources(tmp_path_factory):
             fh.write(f"TAIR\tlocus:{i}\tsym{i}\t\t{go}\tPMID:1\tIEA\t\tP\tname {i}\t{g}|sym{i}\tprotein\ttaxon:3702\t20260101\tTAIR\t\t\n")
     with gzip.open(d / "go-basic.obo.gz", "wt") as fh:
         fh.write(OBO)
+    # TAIR public data release files
+    with gzip.open(d / "tair_functional_descriptions.txt.gz", "wt") as fh:
+        fh.write("name\tgene_model_type\tshort_description\tCurator_summary\tComputational_description\n")
+        for i, g in enumerate(genes):
+            summ = "Mutants are chlorate resistant and defective in nitrate signaling." if i < 6 else "NULL"
+            for model in (1, 2):
+                fh.write(f"{g}.{model}\tprotein_coding\tprotein {i}\t{summ}\tprotein {i};(source:Araport11)\n")
+    with gzip.open(d / "tair_gene_aliases.txt.gz", "wt") as fh:
+        fh.write("locus_name\tsymbol\tfull_name\n")
+        fh.write(f"{gid(0)}\tCHL1\tCHLORINA 1\n")
+    with gzip.open(d / "tair_germplasm_phenotypes.txt.gz", "wt") as fh:
+        fh.write("LOCUS_NAME\tGERMPLASM_NAME\tPHENOTYPE\tPUBMED_ID\n")
+        fh.write(f"CHL1\tCS1\tchlorate resistant seedlings\t\n{gid(1)}\tCS2\tchlorate resistant seedlings\t\n")
     return d
 
 
