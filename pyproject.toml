@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "genecloud"
+version = "2.0.0"
+description = "Semantic enrichment word clouds for gene lists, built on modern open genome annotation (UniProt, NCBI Gene, Gene Ontology)."
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Gabriel Krouk"}]
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.22", "pandas>=1.4", "scipy>=1.8", "matplotlib>=3.5"]
+keywords = ["bioinformatics", "gene set enrichment", "word cloud", "transcriptomics", "arabidopsis", "text mining"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+  "Intended Audience :: Science/Research",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.scripts]
+genecloud = "genecloud.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/GabKrouk/genecloud"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

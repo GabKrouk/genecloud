@@ -1,0 +1,10 @@
+__pycache__/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+genecloud_sources/
+*.jsonl.gz
+*.go-basic.obo.gz
+*.idx.*.pkl.gz
+results/
