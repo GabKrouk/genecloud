@@ -11,7 +11,8 @@ from . import __version__
 
 def _read_ids(path: str) -> list[str]:
     text = sys.stdin.read() if path == "-" else Path(path).read_text()
-    return [tok for line in text.splitlines() for tok in line.replace(",", " ").replace("\t", " ").split()]
+    return [tok for line in text.splitlines() if not line.lstrip().startswith("#")
+            for tok in line.replace(",", " ").replace("\t", " ").split()]
 
 
 def _read_sets(path: str) -> dict[str, list[str]]:
@@ -48,7 +49,7 @@ def cmd_build(args):
 
 def cmd_run(args):
     gc = _engine(args)
-    bg = _read_ids(args.background) if args.background else None
+    bg = _read_ids(args.background)
     res = gc.run(_read_ids(args.genes), background=bg, **_run_opts(args))
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -65,7 +66,7 @@ def cmd_run(args):
 def cmd_compare(args):
     from .compare import draw_compare
     gc = _engine(args)
-    bg = _read_ids(args.background) if args.background else None
+    bg = _read_ids(args.background)
     sets = _read_sets(args.sets)
     results = {name: gc.run(g, background=bg, **_run_opts(args)) for name, g in sets.items()}
     out = Path(args.out)
@@ -83,7 +84,8 @@ def cmd_compare(args):
 def cmd_legacy(args):
     from .legacy import legacy_genecloud
     gc = _engine(args)
-    t = legacy_genecloud(gc, _read_ids(args.genes), sampling=args.sampling)
+    t = legacy_genecloud(gc, _read_ids(args.genes), background=_read_ids(args.background),
+                         sampling=args.sampling)
     t.to_csv(args.out, sep="\t", index=False)
     print(args.out)
 
@@ -103,7 +105,9 @@ def main(argv=None):
     def common(sp):
         sp.add_argument("-a", "--annotation", required=True, help="table made by 'genecloud build'")
         sp.add_argument("--species", default="arabidopsis")
-        sp.add_argument("--background", help="file with the background genes (e.g. all expressed genes)")
+        sp.add_argument("-b", "--background", required=True,
+                        help="REQUIRED: file with the background genes, i.e. every gene that could have been "
+                             "in the list (all expressed genes, all genes on the array...)")
         sp.add_argument("--layers", default="word,phrase,keyword", help="any of word,phrase,keyword,go")
         sp.add_argument("--fdr", type=float, default=0.05)
         sp.add_argument("--min-genes", type=int, default=2)

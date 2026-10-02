@@ -53,7 +53,7 @@ ANNOTATION_STOPWORDS = ANNOTATION_STOPWORDS - {"binding"}
 _EVIDENCE = re.compile(r"\{ECO:[^}]*\}|\((?:PubMed|By similarity)[^)]*\)|PubMed:\d+", re.I)
 _EC = re.compile(r"\bEC\s?\d+(\.[\d-]+){0,3}\b")
 _TOKEN = re.compile(r"[a-z][a-z0-9'\u2011]*[a-z0-9]|[a-z]")
-_PREFIX = re.compile(r"\b(trans|cis|co|non|anti|multi|pre|post|pro|sub|semi|mono|poly|inter|intra|extra|hetero|homo|self|cross)-(?=[a-z])")
+_PREFIX = re.compile(r"\b(trans|cis|co|non|anti|multi|pre|post|pro|sub|semi|mono|poly|inter|intra|extra|hetero|homo|self|cross|short)-(?=[a-z])")
 _HAS_DIGIT = re.compile(r"\d")
 _LEMMA_KEEP = frozenset("""species series analysis biosynthesis synthesis hydrolysis homeostasis apoptosis
 mitosis meiosis stress process class glass gas lens chitosanase mucus virus focus status bus axis basis

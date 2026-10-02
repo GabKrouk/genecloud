@@ -7,4 +7,5 @@ genecloud_sources/
 *.jsonl.gz
 *.go-basic.obo.gz
 *.idx.*.pkl.gz
-results/
+/results/
+examples/results/*.pdf

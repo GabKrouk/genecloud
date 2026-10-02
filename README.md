@@ -8,7 +8,7 @@ drawn as a word cloud in which **the size of each word is its statistical enrich
 GeneCloud 2 is a complete rewrite of GeneCloud (G. Krouk, 2013, R package `GeneCloud.gb`) with a modern,
 openly licensed genome annotation and a modern statistical engine.
 
-
+![Auxin-induced genes](examples/images/hormone_IAA_up.png)
 
 ## What is new compared with GeneCloud 2013
 
@@ -17,7 +17,7 @@ openly licensed genome annotation and a modern statistical engine.
 | Annotation | TAIR gene descriptions frozen in Dec 2012, bundled | Rebuilt on demand from **UniProtKB** (protein names, curated FUNCTION text, keywords, families), **NCBI Gene** (symbols, descriptions, nomenclature names) and the **Gene Ontology** (GAF + ontology). All CC BY 4.0 / public domain |
 | Unit of counting | every occurrence of a word (a long description weighs more) | **genes** carrying the concept (one gene = one vote) |
 | Concepts | single words | words (lemmatised: *transporters* → *transporter*), **two-word phrases** detected genome-wide by normalised PMI (*high affinity*, *plasma membrane*, *xenobiotic detoxification*), **UniProt keywords**, optionally **GO terms** (with ancestors) |
-| Statistics | 100 random gene lists; significant if never reached (P < 0.01 at best), no multiple-testing correction | exact **hypergeometric test** against a user-defined **background** (e.g. all expressed genes), **Benjamini–Hochberg FDR**, fold enrichment |
+| Statistics | 100 random gene lists drawn from the whole genome; significant if never reached (P < 0.01 at best), no multiple-testing correction | exact **hypergeometric test** against a **mandatory background** (the genes that could have been in the list), **Benjamini–Hochberg FDR**, fold enrichment |
 | Noise | gene names, numbers and identifiers appear as "significant" | identifiers, numbers, evidence tags and annotation boilerplate removed; a concept must be carried by ≥ 2 genes; over-general concepts (> 25 % of background) are not tested |
 | Redundancy | *ammonium*, *ammonium transporter*, *amt11* … all shown | redundant concepts carried by the same genes are **merged** (the most significant represents the group); lone words are shown with the phrase their genes share (*distance* → *long distance*) |
 | Word size | word frequency | **−log10 FDR**; colour = fold enrichment; non-significant trends optionally in grey |
@@ -41,15 +41,18 @@ Python ≥ 3.9; dependencies: numpy, pandas, scipy, matplotlib.
 # 1. build the annotation once (~30 MB download, ~10 s to parse)
 genecloud build --species arabidopsis --out arabidopsis.jsonl.gz
 
-# 2. one gene list -> cloud + interactive report + table
-genecloud run my_cluster.txt -a arabidopsis.jsonl.gz --background expressed_genes.txt -o results/cluster1
+# 2. one gene list + its background -> cloud + interactive report + table
+genecloud run my_cluster.txt -a arabidopsis.jsonl.gz -b expressed_genes.txt -o results/cluster1
 
 # 3. several lists at once (two-column file: gene <TAB> set) -> one cloud per set + comparison dot plot
-genecloud compare clusters.tsv -a arabidopsis.jsonl.gz --background expressed_genes.txt -o results/clusters
+genecloud compare clusters.tsv -a arabidopsis.jsonl.gz -b expressed_genes.txt -o results/clusters
 ```
 
+The background (`-b/--background`, or `background=` in Python) is **required**: it is the list of genes
+that *could* have appeared in your list — every gene detected in the RNA-seq, every gene on the array.
+
 Gene files can contain one identifier per line or any text: identifiers are recognised by pattern
-(`AT1G01010`, `At1g01010.1` …).
+(`AT1G01010`, `At1g01010.1` …); lines starting with `#` are ignored.
 
 From Python:
 
@@ -83,8 +86,9 @@ gc.html(res, "cloud.html", title="Cluster 2")
 
 ### Choosing the background
 
-Always pass the genes that *could* have been in your list (e.g. all genes detected in the RNA-seq). Using the
-whole genome as background inflates enrichment for anything associated with expression in your tissue.
+The background is mandatory. Pass the genes that *could* have been in your list: all genes detected in the
+RNA-seq, or all genes represented on the microarray. Using the whole genome instead inflates enrichment for
+anything associated with expression in your tissue or with presence on the array.
 
 ### Good practice
 
@@ -92,6 +96,48 @@ whole genome as background inflates enrichment for anything associated with expr
   `genes` column: a concept carried by 2 genes is a lead, not a conclusion.
 * GeneCloud complements, not replaces, GO enrichment: its strength is to surface **vocabulary that no ontology
   term captures** (a protein family, a transported molecule, a phenotype described in UniProt).
+
+## Examples: the lists of the GeneCloud paper
+
+`examples/` re-runs the three analyses of the original GeneCloud paper
+(Krouk, Carré, Fizames, Gojon, Ruffel & Lacombe, 2015, *Mol. Plant* 8:971,
+[doi:10.1016/j.molp.2015.02.005](https://doi.org/10.1016/j.molp.2015.02.005)) with GeneCloud 2.
+All lists come from ATH1 microarrays, so the background is every gene on the ATH1 array
+(`examples/lists/background_ATH1.txt`, 21,521 annotated genes).
+
+```bash
+genecloud build --species arabidopsis --out arabidopsis.jsonl.gz
+python examples/run_examples.py arabidopsis.jsonl.gz                # -> examples/results/, examples/images/
+python examples/prepare_lists.py SOURCE_DIR                         # optional: rebuild the lists from the public files
+```
+
+| list | source | genes | 2015 paper found | GeneCloud 2 top concepts (FDR) |
+|---|---|---|---|---|
+| auxin (IAA)-induced | Nemhauser et al. 2006 *Cell*, Table S5 | 430 | *auxin* (P = 3·10⁻¹⁴) | **auxin responsive** (10⁻³⁹), Auxin signaling pathway, promoter element (AuxRE), Aux/IAA, SAUR, acetic acid |
+| induced by PHR1 over-expression | Bustos et al. 2010 *PLoS Genet*, GSE20955: OxPHR1 vs *phr1*, ≥ 2-fold, t-test P < 0.05 | 381 | *phosphate*, *purple*, *glutaredoxin*, *phosphatase* | **phosphate starvation** (10⁻²¹), inorganic, purple acid (phosphatase), phosphatase, glycolipid / DGDG / MGDG, monothiol glutaredoxin |
+| nitrate-responsive | Canales et al. 2014 *Front. Plant Sci.*, Table S1 (meta-analysis) | 2,264 | *nitrate*, *shaqkyf* (Wang et al. 2004 lists) | hypoxia, photosynthesis, apoplast, **nitrate** (10⁻¹⁸; nitrite, nitrate assimilation, high-affinity nitrate merged), sulfate, ammonium |
+
+![PHR1](examples/images/PHR1_induced.png)
+
+![Nitrate](examples/images/nitrate_responsive.png)
+
+The seven hormone treatments of Nemhauser et al. (2006), induced genes, compared in one dot plot: each hormone
+is recognised by its own vocabulary (auxin, brassinosteroid → cell wall / xyloglucan, cytokinin, abscisic acid,
+ethylene, jasmonic acid / glucosinolate). Gibberellin (40 genes) gives little, as in the original study.
+
+![Hormones](examples/images/hormones_compare.png)
+
+Notes on the examples
+
+* The 2015 nitrate example used the WT and NR-null lists of Wang et al. (2004, *Plant Physiol.* 136:2512), whose
+  supplementary tables are not openly downloadable. It is replaced here by the nitrate-responsive genes of the
+  Canales et al. (2014) meta-analysis of 27 ATH1 nitrate-treatment experiments.
+* *shaqkyf* came from the 2012 TAIR descriptions of GARP/MYB-related proteins ("myb-like HTH transcriptional
+  regulator family protein … SHAQKYF class"). That wording is absent from today's UniProt / NCBI / GO
+  annotation, so the term cannot appear any more.
+* Auxin is reported for auxin-regulated genes partly because they were *described* from such experiments: the
+  circularity discussed in the 2015 paper still applies.
+* `examples/results/` holds the tables (`*.tsv`) and interactive reports (`*.html`) of every example.
 
 ## Other species
 
@@ -113,7 +159,9 @@ identifier pattern). Adding one is a few lines; pull requests welcome.
 
 ## Citing
 
-If you use GeneCloud, please cite this repository (see `CITATION.cff`) and the annotation sources:
+If you use GeneCloud, please cite Krouk G, Carré C, Fizames C, Gojon A, Ruffel S, Lacombe B (2015) GeneCloud
+reveals semantic enrichment in lists of gene descriptions. *Mol. Plant* 8:971–973, this repository (see
+`CITATION.cff`), and the annotation sources:
 UniProt Consortium (Nucleic Acids Res.), Gene Ontology Consortium (Genetics), NCBI Gene (Nucleic Acids Res.).
 
 ## License

@@ -65,6 +65,12 @@ class CloudResult:
         self.table.to_csv(path, sep="\t", index=False)
 
 
+def _code_tag() -> str:
+    """Changes whenever the text-processing code changes, so stale concept caches are rebuilt."""
+    src = b"".join((Path(__file__).parent / f).read_bytes() for f in ("text.py", "core.py"))
+    return hashlib.md5(src).hexdigest()[:8]
+
+
 class GeneCloud:
     """Build once per annotation, then call :meth:`run` on any gene list.
 
@@ -86,7 +92,7 @@ class GeneCloud:
         self.genes, self.meta = ann.load(self.annotation_path)
         self.onto = ann.ontology_for(self.annotation_path)
         key = repr((self.layers, tuple(text_fields), keep_symbols, phrase_min_genes, phrase_min_npmi,
-                    self.annotation_path.stat().st_size, self.meta.get("built")))
+                    self.annotation_path.stat().st_size, self.meta.get("built"), _code_tag()))
         cache_path = self.annotation_path.with_suffix(".idx." + hashlib.md5(key.encode()).hexdigest()[:10] + ".pkl.gz")
         if cache and cache_path.exists():
             with gzip.open(cache_path, "rb") as fh:
@@ -161,20 +167,27 @@ class GeneCloud:
         return (g.symbol if g and g.symbol else gid)
 
     # ------------------------------------------------------------------ test
-    def run(self, genes: Iterable[str], background: Iterable[str] | None = None, min_genes: int = 2,
+    def run(self, genes: Iterable[str], background: Iterable[str], min_genes: int = 2,
             fdr: float = 0.05, max_concept_frac: float = 0.25, merge_jaccard: float = 0.75,
             min_fold: float = 1.0, trend_p: float = 0.01) -> CloudResult:
         """Hypergeometric over-representation of every concept in ``genes`` vs ``background``.
+
+        background       REQUIRED. The genes that could have been in the list (e.g. all genes detected in the
+                         experiment, or all genes on the array). Study genes absent from it are ignored.
 
         min_genes        concept must be present in at least this many study genes (kills gene-name noise)
         max_concept_frac concepts carried by more than this fraction of the background are not tested
         merge_jaccard    significant concepts carried by (almost) the same study genes are merged; the most
                          significant one represents the group (e.g. 'ammonium' + 'ammonium transport')
         """
+        if background is None or isinstance(background, str):
+            raise ValueError("a background gene list is required (the genes that could have been in the list, "
+                             "e.g. all expressed genes or all genes on the array)")
         req = self.normalise(genes)
-        universe = set(self.concepts)
-        if background is not None:
-            universe &= set(self.normalise(background))
+        bg = set(self.normalise(background))
+        if not bg:
+            raise ValueError("the background contains no recognised gene identifier")
+        universe = set(self.concepts) & bg
         study = [g for g in req if g in universe]
         missing = [g for g in req if g not in universe]
         N, n = len(universe), len(study)
@@ -182,7 +195,7 @@ class GeneCloud:
             raise ValueError("none of the genes are annotated / in the background")
         counts_bg: dict[str, int] = {}
         for c, mem in self.members.items():
-            k = len(mem & universe) if background is not None else len(mem)
+            k = len(mem & universe)
             if k:
                 counts_bg[c] = k
         hits: dict[str, list] = {}
@@ -250,7 +263,7 @@ class GeneCloud:
         t["genes"] = [", ".join(gs) for gs in t.genes]
         params = dict(min_genes=min_genes, fdr=fdr, max_concept_frac=max_concept_frac,
                       merge_jaccard=merge_jaccard, min_fold=min_fold, trend_p=trend_p, layers=self.layers,
-                      background="custom" if background is not None else "annotated genome",
+                      background_genes=len(bg), background_annotated=N,
                       annotation=self.meta)
         return CloudResult(t, study, missing, N, params)
 

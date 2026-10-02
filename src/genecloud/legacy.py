@@ -25,11 +25,15 @@ def _freq(texts, stop):
     return c
 
 
-def legacy_genecloud(gc, genes, sampling: int = 100, seed: int = 1) -> pd.DataFrame:
+def legacy_genecloud(gc, genes, background, sampling: int = 100, seed: int = 1) -> pd.DataFrame:
     from .text import ENGLISH_STOPWORDS
     rng = np.random.default_rng(seed)
     text = {g: " ".join(gc._text(a, ("names", "description", "protein_names", "function", "families")))
             for g, a in gc.genes.items()}
+    if background is None or isinstance(background, str):
+        raise ValueError("a background gene list is required")
+    bg = set(gc.normalise(background))
+    text = {g: t for g, t in text.items() if g in bg}
     universe = np.array(sorted(g for g, t in text.items() if t))
     study = [g for g in gc.normalise(genes) if g in set(universe)]
     obs = _freq((text[g] for g in study), ENGLISH_STOPWORDS)

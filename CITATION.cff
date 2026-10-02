@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use GeneCloud, please cite it as below."
 title: "GeneCloud: semantic enrichment word clouds for gene lists"
-version: 2.0.0
+version: 2.0.1
 date-released: 2026-10-02
 authors:
   - family-names: Krouk
@@ -9,3 +9,25 @@ authors:
 license: MIT
 repository-code: "https://github.com/GabKrouk/genecloud"
 keywords: [bioinformatics, gene set enrichment, word cloud, text mining, transcriptomics]
+preferred-citation:
+  type: article
+  title: "GeneCloud Reveals Semantic Enrichment in Lists of Gene Descriptions"
+  authors:
+    - family-names: Krouk
+      given-names: Gabriel
+    - family-names: Carré
+      given-names: Clément
+    - family-names: Fizames
+      given-names: Cécile
+    - family-names: Gojon
+      given-names: Alain
+    - family-names: Ruffel
+      given-names: Sandrine
+    - family-names: Lacombe
+      given-names: Benoît
+  journal: "Molecular Plant"
+  volume: 8
+  start: 971
+  end: 973
+  year: 2015
+  doi: "10.1016/j.molp.2015.02.005"

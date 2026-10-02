@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.1 — 2026-10-02
+- The background gene list is now **mandatory** (`-b/--background` in the CLI, `background=` in `GeneCloud.run`
+  and `legacy_genecloud`).
+- `examples/`: the gene lists of the 2015 GeneCloud paper (Nemhauser 2006 hormones, PHR1 / GSE20955, nitrate)
+  rebuilt from the public data, an ATH1 background, the scripts and the resulting clouds, tables and reports.
+- Lines starting with `#` are ignored in gene files; `short-` compounds kept as one token; concept cache
+  invalidated when the text-processing code changes.
+
 ## 2.0.0 — 2026-10-02
 Complete rewrite in Python of GeneCloud (R package `GeneCloud.gb`, 2013).
 

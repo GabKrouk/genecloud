@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "genecloud"
-version = "2.0.0"
+version = "2.0.1"
 description = "Semantic enrichment word clouds for gene lists, built on modern open genome annotation (UniProt, NCBI Gene, Gene Ontology)."
 readme = "README.md"
 license = {text = "MIT"}
