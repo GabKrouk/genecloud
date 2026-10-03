@@ -20,9 +20,9 @@ $("#theme").addEventListener("click", () => {
   const dark = root.dataset.theme ? root.dataset.theme === "dark"
     : matchMedia("(prefers-color-scheme: dark)").matches;
   root.dataset.theme = dark ? "light" : "dark";
-  try { localStorage.setItem("gc-theme", root.dataset.theme); } catch (e) {}
+  try { localStorage.setItem("gc-theme-2026", root.dataset.theme); } catch (e) {}
 });
-try { const t = localStorage.getItem("gc-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+try { const t = localStorage.getItem("gc-theme-2026"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
 
 // ------------------------------------------------------------------------------------------ loading
 async function fetchBytes(f) {
