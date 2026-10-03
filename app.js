@@ -1,5 +1,6 @@
 // GeneCloud web application: loads the annotation files, runs the engine, draws the cloud.
 import { Annotation, decodeIndex, run, toTSV, toFasta } from "./engine.js";
+import { sendToRegine, incoming, announceReady } from "./regine.js";
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -239,10 +240,11 @@ function show(res) {
   drawCloud();
   // table (as in Fig. 1D of the 2015 paper)
   const tb = $("#terms tbody");
-  tb.innerHTML = rep.map(r => `<tr class="${r.status}" data-i="${res.rows.indexOf(r)}"><td><a href="#" class="term">${esc(r.display)}</a></td>`
+  tb.innerHTML = rep.map(r => `<tr class="${r.status}" data-i="${res.rows.indexOf(r)}"><td><a href="#" class="term">${esc(r.display)}</a> <a href="#" class="rg" title="Send the ${r.k} genes of this term to Régine: which transcription factors bind them?">&rarr; Régine</a></td>`
     + `<td><span class="pill">${esc(r.layer)}</span></td><td class="num">${r.k}</td><td class="num">${r.K.toLocaleString("en")}</td>`
     + `<td class="num">${r.fold.toFixed(1)}</td><td class="num">${fmt(r.p, 3)}</td><td class="num">${fmt(r.fdr, 3)}</td>`
     + `<td class="note">${esc(r.merged)}</td></tr>`).join("");
+  tb.querySelectorAll("a.rg").forEach(a => a.addEventListener("click", ev => { ev.preventDefault(); toRegine(RES.rows[+a.closest("tr").dataset.i]); }));
   tb.querySelectorAll("a.term").forEach(a => a.addEventListener("click", ev => { ev.preventDefault(); select(+a.closest("tr").dataset.i, true); }));
   // genes
   $("#glist tbody").innerHTML = res.study.map(g => {
@@ -302,8 +304,10 @@ function tab(id) {
 $$(".tabs button").forEach(b => b.addEventListener("click", () => tab(b.dataset.p)));
 
 // genes carrying a term, with their annotation and the term highlighted (Fig. 1E of the 2015 paper)
+let SELECTED = -1;
 async function select(i, open) {
   const r = RES.rows[i];
+  SELECTED = i;
   const svg = $("#cloud svg");
   svg.classList.add("sel");
   svg.querySelectorAll("text[data-i]").forEach(t => t.classList.toggle("on", +t.dataset.i === i));
@@ -325,10 +329,16 @@ async function select(i, open) {
   }).join("");
   $("#locus").innerHTML = `<h3 style="margin-top:6px">Find locus containing the term ‘${esc(r.display)}’</h3>`
     + `<p class="note">${r.k} of ${r.n} genes (background ${r.K} of ${r.N}) · fold ×${r.fold.toFixed(1)} · P ${fmt(r.p)} · FDR ${fmt(r.fdr)}`
-    + (r.merged ? ` · merged terms: ${esc(r.merged)}` : "") + `</p><div class="scroll tall"><table><thead><tr><th>Locus</th><th>Type</th>`
+    + (r.merged ? ` · merged terms: ${esc(r.merged)}` : "") + ` · <a href="#" id="locus-rg">&rarr; Régine: transcription factors binding these ${r.k} genes</a></p><div class="scroll tall"><table><thead><tr><th>Locus</th><th>Type</th>`
     + `<th>Short description</th><th>Curator summary</th><th>Computational description</th><th>UniProt</th><th>Phenotypes</th></tr></thead>`
     + `<tbody>${rows}</tbody></table></div>`;
 }
+
+$("#locus").addEventListener("click", ev => {
+  if (ev.target.id !== "locus-rg") return;
+  ev.preventDefault();
+  toRegine(RES.rows[SELECTED]);
+});
 
 // sortable term table
 $$("#terms thead th[data-s]").forEach(th => th.addEventListener("click", () => {
@@ -389,3 +399,24 @@ $("#share").addEventListener("click", async () => {
   if ($("input[name=bg]:checked")) $("#form").requestSubmit();
 })();
 ready.then(countIds);
+
+// ------------------------------------------------------------------------------------------ Régine bridge
+function toRegine(r) {
+  const go = /^g:GO:\d+$/.test(r.concept) ? r.concept.slice(2) : "";     // GO terms keep their identifier
+  const name = r.display || r.label;
+  if (!sendToRegine({ genes: r.geneIds, name: go ? name : `${name} (${r.layer})`, go })) status('<span class="err">Could not open Régine (pop-up blocked?).</span>');
+}
+$("#toregine").addEventListener("click", () => {
+  if (!LAST || !sendToRegine({ genes: LAST.genes, name: "GeneCloud list" })) status('<span class="err">Run an analysis first.</span>');
+});
+async function fromRegine({ genes, name }) {     // a list sent by Régine: look at its GO terms and words
+  await ready;
+  $("#genes").value = genes.join("\n");
+  const ath1 = $("input[name=bg][value=ATH1]"); if (ath1) { ath1.checked = true; ath1.dispatchEvent(new Event("change")); }
+  $$("input[name=layer]").forEach(x => { if (x.value === "go") x.checked = true; });
+  countIds();
+  status(`List received from Régine${name ? ": " + esc(name) : ""} (${genes.length} genes)`);
+  $("#form").requestSubmit();
+}
+incoming(fromRegine);
+ready.then(announceReady);

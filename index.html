@@ -39,6 +39,7 @@ nav{border-bottom:1px solid var(--rule)}
 nav .in{max-width:1080px;margin:0 auto;padding:8px 16px;display:flex;gap:22px;flex-wrap:wrap;font:600 13px var(--sans);text-transform:uppercase;letter-spacing:.06em}
 nav a{color:var(--fg)}nav a.cur{color:var(--leaf2)}
 nav .sp{flex:1}
+a.rg{font:600 12px var(--sans);margin-left:6px;white-space:nowrap}
 #theme{background:none;border:1px solid var(--rule);color:var(--sub);border-radius:6px;font:600 12px var(--sans);padding:2px 8px;cursor:pointer}
 
 main{max-width:1080px;margin:0 auto;padding:18px 16px 60px}
@@ -237,6 +238,7 @@ footer p{margin:0 0 8px;max-width:95ch}
       <button type="button" id="dltsv">Table (TSV)</button>
       <button type="button" id="dlfa">Gene lists per term (FASTA-like)</button>
       <button type="button" id="share">Copy link to this analysis</button>
+      <button type="button" id="toregine" title="Which transcription factors bind these genes?">Send the list to Régine</button>
     </div>
     <div class="tabs" role="tablist">
       <button class="on" data-p="ptable" role="tab">Over-represented terms</button>
