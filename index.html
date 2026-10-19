@@ -39,6 +39,20 @@ nav{border-bottom:1px solid var(--rule)}
 nav .in{max-width:1080px;margin:0 auto;padding:8px 16px;display:flex;gap:22px;flex-wrap:wrap;font:600 13px var(--sans);text-transform:uppercase;letter-spacing:.06em}
 nav a{color:var(--fg)}nav a.cur{color:var(--leaf2)}
 nav .sp{flex:1}
+a.rg{font:600 12px var(--sans);margin-left:6px;white-space:nowrap}
+/* search the annotation */
+#search{border:1px solid var(--rule);background:var(--soft);border-radius:8px;padding:12px 18px 14px;margin:0 0 22px}
+#search h3{margin:0 0 4px}
+.qrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 6px}
+#q{flex:1;min-width:240px;font:15px var(--sans);color:var(--fg);background:var(--card);border:1px solid var(--rule);border-radius:6px;padding:7px 10px}
+#sresults{display:none;margin-top:10px}
+#sresults .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+#sresults .acts button{font:600 13px var(--sans);background:var(--card);color:var(--fg);border:1px solid var(--rule);border-radius:6px;padding:5px 12px;cursor:pointer}
+#sresults .acts button.main{background:var(--leaf);color:#fff;border-color:transparent;font-size:14px;padding:6px 16px}
+#sresults .acts button.main:hover{background:var(--leaf2)}
+#sresults .acts button:not(.main):hover{border-color:var(--leaf2)}
+#stable td.long{min-width:260px;max-width:620px}
+#stable .src{font-size:11.5px;color:var(--sub);text-transform:uppercase;letter-spacing:.04em;margin-right:4px}
 #theme{background:none;border:1px solid var(--rule);color:var(--sub);border-radius:6px;font:600 12px var(--sans);padding:2px 8px;cursor:pointer}
 
 main{max-width:1080px;margin:0 auto;padding:18px 16px 60px}
@@ -61,6 +75,7 @@ textarea:focus,select:focus,input:focus{outline:2px solid var(--leaf2);outline-o
 .opts .n{color:var(--sub);font-size:13px}
 .examples{margin-top:6px;font-size:14px}
 .examples button{all:unset;color:var(--link);cursor:pointer}.examples button:hover{text-decoration:underline}
+.linkbtn{all:unset;color:var(--link);cursor:pointer}.linkbtn:hover{text-decoration:underline}
 .count{font-size:13px;color:var(--sub);margin-top:4px}
 .buttons{display:flex;gap:10px;align-items:center;padding-top:14px}
 button.main,button.sec{font:600 15px var(--sans);border-radius:6px;padding:8px 22px;cursor:pointer;border:1px solid transparent}
@@ -122,6 +137,7 @@ footer p{margin:0 0 8px;max-width:95ch}
 </header>
 <nav><div class="in">
   <a href="#" class="cur">Online program</a>
+  <a href="#search">Search the annotation</a>
   <a href="#how">How it works</a>
   <a href="https://github.com/GabKrouk/genecloud">Python package</a>
   <a href="https://doi.org/10.1016/j.molp.2015.02.005">Paper (2015)</a>
@@ -138,6 +154,44 @@ footer p{margin:0 0 8px;max-width:95ch}
   words and phrases that are significantly more frequent in your list than in the background, as a word cloud in
   which <b>the size of a word is its statistical enrichment</b>. It complements GO analysis: it finds vocabulary that
   no ontology term captures. <span class="note">The analysis runs in your browser: your gene list is never sent anywhere.</span></p>
+
+  <section id="search">
+    <h3>Search the annotation</h3>
+    <p class="note" style="margin:0">Find every gene whose annotation mentions a word, then send these genes to
+    <a href="https://gabkrouk.github.io/Regine/">Régine</a>: which transcription factors bind or regulate them more than expected?
+    Combine terms with <b>AND</b>, <b>OR</b>, <b>NOT</b> (or ET, OU, SAUF) and parentheses; quote phrases. A term matches the words
+    that start with it (<i>nitrate</i> finds <i>nitrates</i>); the annotation is in English.</p>
+    <form id="sform" autocomplete="off" novalidate>
+      <div class="qrow">
+        <input id="q" type="search" spellcheck="false" placeholder='nitrate AND (xylem OR phloem)' aria-label="Search the gene annotation">
+        <button class="main" id="sgo" type="submit">Search</button>
+      </div>
+      <div class="opts">
+        <label><input type="checkbox" id="spc" checked> protein-coding genes only</label>
+        <label><input type="checkbox" id="sgoterms" checked> include GO term names</label>
+        <label><input type="checkbox" id="sww"> whole words only <span class="n">(<i>transport*</i> still works)</span></label>
+      </div>
+      <div class="examples">Examples:
+        <button type="button" data-q="nitrate">nitrate</button> ·
+        <button type="button" data-q="xylem">xylem</button> ·
+        <button type="button" data-q='"nitrate" AND "xylem" OR "auxin"'>"nitrate" AND "xylem" OR "auxin"</button> ·
+        <button type="button" data-q='"root hair" NOT ethylene'>"root hair" NOT ethylene</button> ·
+        <button type="button" data-q="(nitrate OR nitrogen) AND transport*">(nitrate OR nitrogen) AND transport*</button>
+      </div>
+      <div id="sstatus" class="count"></div>
+    </form>
+    <div id="sresults" aria-live="polite">
+      <div class="summary" id="ssummary"></div>
+      <div class="acts">
+        <button type="button" class="main" id="s2regine" title="Open Régine with these genes: candidate transcription factors (DAP-seq binding, TARGET regulation)">Send to Régine</button>
+        <button type="button" id="s2gc" title="Put these genes in the gene list below and run GeneCloud">Analyse with GeneCloud</button>
+        <button type="button" id="sdl">Genes (TSV)</button>
+        <button type="button" id="sshare">Copy link to this search</button>
+      </div>
+      <div class="scroll tall"><table id="stable"><thead><tr><th>Locus</th><th>Type</th><th>Short description</th><th>Where the terms are found</th></tr></thead><tbody></tbody></table></div>
+      <p class="note" id="smore"></p>
+    </div>
+  </section>
 
   <form id="form" autocomplete="off" novalidate>
     <div class="row">
@@ -237,6 +291,7 @@ footer p{margin:0 0 8px;max-width:95ch}
       <button type="button" id="dltsv">Table (TSV)</button>
       <button type="button" id="dlfa">Gene lists per term (FASTA-like)</button>
       <button type="button" id="share">Copy link to this analysis</button>
+      <button type="button" id="toregine" title="Which transcription factors bind these genes?">Send the list to Régine</button>
     </div>
     <div class="tabs" role="tablist">
       <button class="on" data-p="ptable" role="tab">Over-represented terms</button>

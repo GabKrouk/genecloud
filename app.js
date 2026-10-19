@@ -1,5 +1,7 @@
 // GeneCloud web application: loads the annotation files, runs the engine, draws the cloud.
 import { Annotation, decodeIndex, run, toTSV, toFasta } from "./engine.js";
+import { sendToRegine, incoming, announceReady } from "./regine.js";
+import { norm, compile, matches } from "./search.js";
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -81,7 +83,7 @@ $("#bgcustom").addEventListener("input", () => {
   const n = ANN ? ANN.parseIds($("#bgcustom").value).length : 0;
   $("#bgcount").textContent = `${n} identifiers`;
 });
-$$(".examples button").forEach(b => b.addEventListener("click", async () => {
+$$("#form .examples button").forEach(b => b.addEventListener("click", async () => {
   const t = await (await fetch(`examples/${b.dataset.ex}.txt`)).text();
   $("#genes").value = t.split("\n").filter(l => !l.startsWith("#")).join("\n").trim();
   const ath1 = $("input[name=bg][value=ATH1]"); ath1.checked = true; ath1.dispatchEvent(new Event("change"));
@@ -239,10 +241,11 @@ function show(res) {
   drawCloud();
   // table (as in Fig. 1D of the 2015 paper)
   const tb = $("#terms tbody");
-  tb.innerHTML = rep.map(r => `<tr class="${r.status}" data-i="${res.rows.indexOf(r)}"><td><a href="#" class="term">${esc(r.display)}</a></td>`
+  tb.innerHTML = rep.map(r => `<tr class="${r.status}" data-i="${res.rows.indexOf(r)}"><td><a href="#" class="term">${esc(r.display)}</a> <a href="#" class="rg" title="Send the ${r.k} genes of this term to Régine: which transcription factors bind them?">&rarr; Régine</a></td>`
     + `<td><span class="pill">${esc(r.layer)}</span></td><td class="num">${r.k}</td><td class="num">${r.K.toLocaleString("en")}</td>`
     + `<td class="num">${r.fold.toFixed(1)}</td><td class="num">${fmt(r.p, 3)}</td><td class="num">${fmt(r.fdr, 3)}</td>`
     + `<td class="note">${esc(r.merged)}</td></tr>`).join("");
+  tb.querySelectorAll("a.rg").forEach(a => a.addEventListener("click", ev => { ev.preventDefault(); toRegine(RES.rows[+a.closest("tr").dataset.i]); }));
   tb.querySelectorAll("a.term").forEach(a => a.addEventListener("click", ev => { ev.preventDefault(); select(+a.closest("tr").dataset.i, true); }));
   // genes
   $("#glist tbody").innerHTML = res.study.map(g => {
@@ -302,8 +305,10 @@ function tab(id) {
 $$(".tabs button").forEach(b => b.addEventListener("click", () => tab(b.dataset.p)));
 
 // genes carrying a term, with their annotation and the term highlighted (Fig. 1E of the 2015 paper)
+let SELECTED = -1;
 async function select(i, open) {
   const r = RES.rows[i];
+  SELECTED = i;
   const svg = $("#cloud svg");
   svg.classList.add("sel");
   svg.querySelectorAll("text[data-i]").forEach(t => t.classList.toggle("on", +t.dataset.i === i));
@@ -325,10 +330,16 @@ async function select(i, open) {
   }).join("");
   $("#locus").innerHTML = `<h3 style="margin-top:6px">Find locus containing the term ‘${esc(r.display)}’</h3>`
     + `<p class="note">${r.k} of ${r.n} genes (background ${r.K} of ${r.N}) · fold ×${r.fold.toFixed(1)} · P ${fmt(r.p)} · FDR ${fmt(r.fdr)}`
-    + (r.merged ? ` · merged terms: ${esc(r.merged)}` : "") + `</p><div class="scroll tall"><table><thead><tr><th>Locus</th><th>Type</th>`
+    + (r.merged ? ` · merged terms: ${esc(r.merged)}` : "") + ` · <a href="#" id="locus-rg">&rarr; Régine: transcription factors binding these ${r.k} genes</a></p><div class="scroll tall"><table><thead><tr><th>Locus</th><th>Type</th>`
     + `<th>Short description</th><th>Curator summary</th><th>Computational description</th><th>UniProt</th><th>Phenotypes</th></tr></thead>`
     + `<tbody>${rows}</tbody></table></div>`;
 }
+
+$("#locus").addEventListener("click", ev => {
+  if (ev.target.id !== "locus-rg") return;
+  ev.preventDefault();
+  toRegine(RES.rows[SELECTED]);
+});
 
 // sortable term table
 $$("#terms thead th[data-s]").forEach(th => th.addEventListener("click", () => {
@@ -389,3 +400,149 @@ $("#share").addEventListener("click", async () => {
   if ($("input[name=bg]:checked")) $("#form").requestSubmit();
 })();
 ready.then(countIds);
+
+// ------------------------------------------------------------------------------------------ Régine bridge
+function toRegine(r) {
+  const go = /^g:GO:\d+$/.test(r.concept) ? r.concept.slice(2) : "";     // GO terms keep their identifier
+  const name = r.display || r.label;
+  if (!sendToRegine({ genes: r.geneIds, name: go ? name : `${name} (${r.layer})`, go })) status('<span class="err">Could not open Régine (pop-up blocked?).</span>');
+}
+$("#toregine").addEventListener("click", () => {
+  if (!LAST || !sendToRegine({ genes: LAST.genes, name: "GeneCloud list" })) status('<span class="err">Run an analysis first.</span>');
+});
+async function fromRegine({ genes, name }) {     // a list sent by Régine: look at its GO terms and words
+  await ready;
+  $("#genes").value = genes.join("\n");
+  const ath1 = $("input[name=bg][value=ATH1]"); if (ath1) { ath1.checked = true; ath1.dispatchEvent(new Event("change")); }
+  $$("input[name=layer]").forEach(x => { if (x.value === "go") x.checked = true; });
+  countIds();
+  status(`List received from Régine${name ? ": " + esc(name) : ""} (${genes.length} genes)`);
+  $("#form").requestSubmit();
+}
+incoming(fromRegine);
+ready.then(announceReady);
+
+// ------------------------------------------------------------------------------------------ search the annotation
+// The texts of every gene (symbol, descriptions, curator summary, UniProt, phenotypes and GO term names) are searched
+// with a boolean query (search.js); the genes found can be sent to Régine or analysed here.
+const SFIELDS = ["Symbol", "Short description", "Curator summary", "Computational description", "UniProt", "Phenotypes", "GO"];
+let SINDEX = null, GONAMES = null, SHITS = null;
+async function searchIndex(withGo) {
+  await ready;
+  TEXTS ??= await fetchJSON("texts.json.gz");
+  if (withGo && !GONAMES) {
+    await loadBlock("go");
+    const b = ANN.blocks.go;
+    GONAMES = Array.from({ length: ANN.nGenes }, () => []);
+    for (let c = 0; c < b.labels.length; c++) for (let x = b.start[c]; x < b.start[c + 1]; x++) GONAMES[b.mem[x]]?.push(b.labels[c]);
+  }
+  const key = withGo ? "go" : "text";
+  if (SINDEX?.key === key) return SINDEX;
+  const fields = k => { const t = TEXTS[k] || []; return [ANN.genes.symbols[k] || "", t[0] || ANN.genes.desc[k] || "", t[1], t[2], t[3], t[4], withGo ? GONAMES[k].join("; ") : ""]; };
+  const text = ANN.genes.ids.map((g, k) => norm(fields(k).join(" ¦ ")));
+  return (SINDEX = { key, text, fields });
+}
+function search(index, c, pc) {
+  const hits = [];
+  for (let k = 0; k < index.text.length; k++) {
+    if (pc && (TEXTS[k]?.[5] || "") !== "protein_coding") continue;
+    if (c.test(index.text[k])) hits.push(k);
+  }
+  return hits;
+}
+const hlTerms = (text, positive) => {
+  const s = String(text || ""), out = [];
+  let last = 0;
+  for (const [a, b] of matches(s, positive)) { out.push(esc(s.slice(last, a)), `<mark>${esc(s.slice(a, b))}</mark>`); last = b; }
+  out.push(esc(s.slice(last)));
+  return out.join("");
+};
+// the part of a long text around its first match
+const excerpt = (text, positive, width = 260) => {
+  const s = String(text || ""), n = norm(s);
+  let first = -1;
+  for (const r of positive) { r.lastIndex = 0; const m = r.exec(n); if (m && (first < 0 || m.index < first)) first = m.index; }
+  if (first < 0 || s.length <= width) return s;
+  const a = Math.max(0, first - 80), b = Math.min(s.length, a + width);
+  return (a ? "…" : "") + s.slice(a, b) + (b < s.length ? "…" : "");
+};
+const SHOWN = 300;
+async function runSearch(all = false) {
+  const q = $("#q").value.trim();
+  if (!q) { $("#sstatus").innerHTML = ""; $("#sresults").style.display = "none"; return; }
+  let c;
+  try { c = compile(q, { wholeWords: $("#sww").checked }); }
+  catch (e) { $("#sstatus").innerHTML = `<span class="err">Query: ${esc(e.message)}.</span>`; return; }
+  if (!c) return;
+  $("#sstatus").innerHTML = '<span class="loader"></span>loading the annotation texts…';
+  const pc = $("#spc").checked, index = await searchIndex($("#sgoterms").checked);
+  const hits = search(index, c, pc);
+  const universe = pc ? TEXTS.filter(t => t[5] === "protein_coding").length : ANN.nGenes;
+  SHITS = { q, genes: hits.map(k => ANN.genes.ids[k]), hits, c, index };
+  $("#sstatus").innerHTML = "";
+  let hint = "";
+  if (hits.length < 5) {          // French or misspelt terms: suggest the English spelling when it finds genes
+    const alt = q.replace(/[\p{L}]+/gu, w => /^(AND|OR|NOT|ET|OU|SAUF|NON)$/.test(w) ? w : norm(w).replace(/e$/, ""));
+    if (norm(alt) !== norm(q)) {
+      try { const n = search(index, compile(alt, { wholeWords: $("#sww").checked }), pc).length;
+        if (n > hits.length) hint = ` The annotation is in English: <button type="button" class="linkbtn" id="salt" data-q="${esc(alt)}">${esc(alt)}</button> finds ${n.toLocaleString("en")} genes.`; } catch (e) {}
+    }
+  }
+  $("#ssummary").innerHTML = `<b>${hits.length.toLocaleString("en")}</b> ${pc ? "protein-coding " : ""}gene${hits.length === 1 ? "" : "s"} of ${universe.toLocaleString("en")} match <b>${esc(q)}</b>.${hint}`;
+  $("#sresults").style.display = "block";
+  $("#s2regine").disabled = $("#s2gc").disabled = hits.length < 2;
+  $("#s2regine").textContent = hits.length >= 2 ? `Send ${hits.length.toLocaleString("en")} genes to Régine` : "Send to Régine";
+  const rows = (all ? hits : hits.slice(0, SHOWN)).map(k => {
+    const f = index.fields(k), t = TEXTS[k] || [];
+    const where = f.map((x, j) => [j, x]).filter(([j, x]) => j > 1 && x && c.positive.some(r => { r.lastIndex = 0; return r.test(norm(x)); }))
+      .map(([j, x]) => `<div><span class="src">${SFIELDS[j]}</span>${hlTerms(excerpt(x, c.positive), c.positive)}</div>`).join("");
+    const g = ANN.genes.ids[k];
+    return `<tr><td><a href="https://www.arabidopsis.org/locus?name=${g}" target="_blank" rel="noopener">${g}</a><br><b>${hlTerms(f[0], c.positive)}</b></td>`
+      + `<td>${esc((t[5] || "").replace(/_/g, " "))}</td><td class="long">${hlTerms(f[1], c.positive)}</td><td class="long">${where}</td></tr>`;
+  }).join("");
+  $("#stable tbody").innerHTML = rows;
+  $("#smore").innerHTML = !all && hits.length > SHOWN ? `First ${SHOWN} genes shown. <button type="button" class="linkbtn" id="sall">Show all ${hits.length.toLocaleString("en")}</button> · every gene is sent to Régine and in the TSV.` : "";
+}
+$("#sform").addEventListener("submit", e => { e.preventDefault(); runSearch(); });
+["#spc", "#sgoterms", "#sww"].forEach(s => $(s).addEventListener("change", () => { if ($("#q").value.trim()) runSearch(); }));
+$$("#search .examples button").forEach(b => b.addEventListener("click", () => { $("#q").value = b.dataset.q; runSearch(); }));
+$("#search").addEventListener("click", e => {
+  if (e.target.id === "sall") runSearch(true);
+  if (e.target.id === "salt") { $("#q").value = e.target.dataset.q; runSearch(); }
+});
+$("#s2regine").addEventListener("click", () => {
+  if (!SHITS || SHITS.genes.length < 2) return;
+  if (!sendToRegine({ genes: SHITS.genes, name: `GeneCloud search: ${SHITS.q}` })) $("#sstatus").innerHTML = '<span class="err">Could not open Régine (pop-up blocked?).</span>';
+});
+$("#s2gc").addEventListener("click", () => {
+  if (!SHITS) return;
+  $("#genes").value = SHITS.genes.join("\n");
+  if (!$("input[name=bg]:checked")) { const r = $("input[name=bg][value=protein_coding]"); r.checked = true; r.dispatchEvent(new Event("change")); }
+  countIds();
+  $("#form").requestSubmit();
+});
+$("#sdl").addEventListener("click", () => {
+  if (!SHITS) return;
+  const clean = x => String(x || "").replace(/[\t\n\r]+/g, " ");
+  const lines = [`# GeneCloud annotation search: ${SHITS.q}`, ["locus", "symbol", "type", "short_description"].join("\t")]
+    .concat(SHITS.hits.map(k => [ANN.genes.ids[k], ANN.genes.symbols[k], TEXTS[k]?.[5], SHITS.index.fields(k)[1]].map(clean).join("\t")));
+  download("genecloud_search.tsv", lines.join("\n") + "\n", "text/tab-separated-values");
+});
+$("#sshare").addEventListener("click", async () => {
+  const p = new URLSearchParams({ search: $("#q").value.trim() });
+  if (!$("#spc").checked) p.set("pc", "0");
+  if (!$("#sgoterms").checked) p.set("goterms", "0");
+  if ($("#sww").checked) p.set("ww", "1");
+  const url = location.origin + location.pathname + "#" + p.toString();
+  history.replaceState(null, "", url);
+  try { await navigator.clipboard.writeText(url); $("#sstatus").textContent = "link copied"; } catch (e) { $("#sstatus").textContent = "link in the address bar"; }
+});
+// a search in the URL (#search=nitrate%20AND%20xylem)
+(() => {
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (!p.has("search")) return;
+  $("#q").value = p.get("search");
+  $("#spc").checked = p.get("pc") !== "0"; $("#sgoterms").checked = p.get("goterms") !== "0"; $("#sww").checked = p.get("ww") === "1";
+  runSearch();
+  $("#search").scrollIntoView({ block: "start" });
+})();
