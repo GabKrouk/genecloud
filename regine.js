@@ -11,7 +11,7 @@ export function sendToRegine({ genes, name = "", go = "" }) {
   genes = agis(genes);
   if (genes.length < 2) return false;
   const p = new URLSearchParams({ from: "genecloud", hs: "1" });
-  if (name) p.set("n", name);
+  if (name) p.set("name", name);
   if (go) p.set("go", go);
   if (genes.length <= 400) p.set("g", genes.join(","));
   const w = window.open(REGINE + "#" + p.toString(), "regine");
@@ -26,7 +26,7 @@ export function sendToRegine({ genes, name = "", go = "" }) {
   return true;
 }
 
-// Lists coming from Régine: by postMessage, or in the hash (#from=regine&n=…&g=AT…,AT…)
+// Lists coming from Régine: by postMessage, or in the hash (#from=regine&name=…&g=AT…,AT…)
 export function incoming(onGenes) {
   addEventListener("message", e => {
     if (e.origin !== ORIGIN || e.data?.type !== "regine:genes") return;
@@ -36,8 +36,9 @@ export function incoming(onGenes) {
   const p = new URLSearchParams(location.hash.replace(/^#/, ""));
   if (p.get("from") === "regine") {
     const genes = agis(p.get("g") || "");
-    if (genes.length) onGenes({ genes, name: p.get("n") || "" });
-    return { waiting: !genes.length && p.get("hs") === "1", name: p.get("n") || "" };
+    const name = p.get("name") || p.get("n") || "";
+    if (genes.length) onGenes({ genes, name });
+    return { waiting: !genes.length && p.get("hs") === "1", name };
   }
   return null;
 }
