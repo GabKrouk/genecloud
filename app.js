@@ -88,6 +88,7 @@ $$("#form .examples button").forEach(b => b.addEventListener("click", async () =
   $("#genes").value = t.split("\n").filter(l => !l.startsWith("#")).join("\n").trim();
   const ath1 = $("input[name=bg][value=ATH1]"); ath1.checked = true; ath1.dispatchEvent(new Event("change"));
   countIds();
+  ORIGIN_OF_LIST = { text: $("#genes").value, source: "example:" + b.dataset.ex, name: "" };
   $("#form").requestSubmit();
 }));
 $("#reset").addEventListener("click", () => {
@@ -109,6 +110,11 @@ function background() {
 }
 
 let RES = null, LAST = null;
+// usage statistics, shared by the tools of gabkrouk.github.io (https://github.com/GabKrouk/tools-usage); never blocks the app
+let USAGE = null, ORIGIN_OF_LIST = null;    // {text, source, name}: where the list in the box came from (example, Régine)
+import("https://gabkrouk.github.io/tools-usage/usage.js")
+  .then(m => { USAGE = m.usage("genecloud", { version: "2" }); USAGE.consent(document.querySelector("#usage-consent")); })
+  .catch(() => {});
 $("#form").addEventListener("submit", async e => {
   e.preventDefault();
   $("#submit").disabled = true;
@@ -132,6 +138,10 @@ $("#form").addEventListener("submit", async e => {
     RES = run(ANN, genes, bg, o);
     LAST = { genes, o, bgChoice: $("input[name=bg]:checked").value };
     show(RES);
+    try {
+      const org = ORIGIN_OF_LIST && ORIGIN_OF_LIST.text === $("#genes").value ? ORIGIN_OF_LIST : { source: "paste", name: "" };
+      USAGE?.run({ genes, source: org.source, name: org.name, params: { background: LAST.bgChoice, layers: o.layers } });
+    } catch {}
     status(`done in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
     $("#results").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (err) {
@@ -417,6 +427,7 @@ async function fromRegine({ genes, name }) {     // a list sent by Régine: look
   $$("input[name=layer]").forEach(x => { if (x.value === "go") x.checked = true; });
   countIds();
   status(`List received from Régine${name ? ": " + esc(name) : ""} (${genes.length} genes)`);
+  ORIGIN_OF_LIST = { text: $("#genes").value, source: "from:regine", name: name || "" };
   $("#form").requestSubmit();
 }
 incoming(fromRegine);

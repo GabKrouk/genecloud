@@ -153,7 +153,7 @@ footer p{margin:0 0 8px;max-width:95ch}
   summaries and descriptions, mutant phenotypes, UniProt function, NCBI Gene and Gene Ontology — and returns the
   words and phrases that are significantly more frequent in your list than in the background, as a word cloud in
   which <b>the size of a word is its statistical enrichment</b>. It complements GO analysis: it finds vocabulary that
-  no ontology term captures. <span class="note">The analysis runs in your browser: your gene list is never sent anywhere.</span></p>
+  no ontology term captures. <span class="note">The analysis runs in your browser. We count page views and analyses, and, unless you untick the box below the button, keep an anonymous copy of the gene list to see which genes are studied together (<a href="#usage-note">details</a>).</span></p>
 
   <section id="search">
     <h3>Search the annotation</h3>
@@ -275,6 +275,7 @@ footer p{margin:0 0 8px;max-width:95ch}
       <button class="sec" type="reset" id="reset">Reset</button>
       <span id="status"></span>
     </div>
+    <div id="usage-consent" style="margin-top:6px"></div>
   </form>
 
   <section id="results" aria-live="polite">
@@ -327,6 +328,9 @@ footer p{margin:0 0 8px;max-width:95ch}
   </section>
 
   <footer>
+    <p id="usage-note"><b>Usage statistics:</b> page views, analyses and, if the box is ticked, the gene identifiers of the list
+    (no IP address, no cookie, no account; a random identifier lasts for the browser tab only), stored by G. Krouk to improve the tools
+    and study which genes are queried together. Untick the box to keep your list private; the choice is remembered on this site.</p>
     <p><b>Cite:</b> Krouk G, Carré C, Fizames C, Gojon A, Ruffel S, Lacombe B (2015) GeneCloud reveals semantic
     enrichment in lists of gene descriptions. <i>Mol. Plant</i> 8:971–973.
     <a href="https://doi.org/10.1016/j.molp.2015.02.005">doi:10.1016/j.molp.2015.02.005</a> — and the
