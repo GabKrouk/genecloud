@@ -490,6 +490,7 @@ async function runSearch(all = false) {
   const hits = search(index, c, pc);
   const universe = pc ? TEXTS.filter(t => t[5] === "protein_coding").length : ANN.nGenes;
   SHITS = { q, genes: hits.map(k => ANN.genes.ids[k]), hits, c, index };
+  if (!all) try { USAGE?.run({ source: "search", params: { query: q } }); } catch {}   // a search counts as one analysis (no list stored)
   $("#sstatus").innerHTML = "";
   let hint = "";
   if (hits.length < 5) {          // French or misspelt terms: suggest the English spelling when it finds genes
