@@ -502,9 +502,24 @@ const excerpt = (text, positive, width = 260) => {
   return (a ? "…" : "") + s.slice(a, b) + (b < s.length ? "…" : "");
 };
 const SHOWN = 300;
+function searchUrl() {
+  const p = new URLSearchParams({ search: $("#q").value.trim() });
+  if (!$("#spc").checked) p.set("pc", "0");
+  if (!$("#sgoterms").checked) p.set("goterms", "0");
+  if ($("#sww").checked) p.set("ww", "1");
+  return location.origin + location.pathname + "#" + p.toString();
+}
 async function runSearch(all = false) {
   const q = $("#q").value.trim();
   if (!q) { $("#sstatus").innerHTML = ""; $("#sresults").style.display = "none"; return; }
+  // a free account is needed to search too: the query is kept in the URL and runs again after signing in
+  const acc = await ACCOUNT;
+  if (acc && !acc.signedIn()) {
+    history.replaceState(null, "", searchUrl());
+    acc.ensure();
+    $("#sstatus").textContent = "Sign in to search the annotation.";
+    return;
+  }
   let c;
   try { c = compile(q, { wholeWords: $("#sww").checked }); }
   catch (e) { $("#sstatus").innerHTML = `<span class="err">Query: ${esc(e.message)}.</span>`; return; }
@@ -565,16 +580,13 @@ $("#sdl").addEventListener("click", () => {
   download("genecloud_search.tsv", lines.join("\n") + "\n", "text/tab-separated-values");
 });
 $("#sshare").addEventListener("click", async () => {
-  const p = new URLSearchParams({ search: $("#q").value.trim() });
-  if (!$("#spc").checked) p.set("pc", "0");
-  if (!$("#sgoterms").checked) p.set("goterms", "0");
-  if ($("#sww").checked) p.set("ww", "1");
-  const url = location.origin + location.pathname + "#" + p.toString();
+  const url = searchUrl();
   history.replaceState(null, "", url);
   try { await navigator.clipboard.writeText(url); $("#sstatus").textContent = "link copied"; } catch (e) { $("#sstatus").textContent = "link in the address bar"; }
 });
 // a search in the URL (#search=nitrate%20AND%20xylem)
-(() => {
+(async () => {
+  await ACCOUNT;                      // back from signing in: the search is put back in the URL first
   const p = new URLSearchParams(location.hash.slice(1));
   if (!p.has("search")) return;
   $("#q").value = p.get("search");
