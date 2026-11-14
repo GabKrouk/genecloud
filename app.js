@@ -115,6 +115,20 @@ let USAGE = null, ORIGIN_OF_LIST = null;    // {text, source, name}: where the l
 import("https://gabkrouk.github.io/tools-usage/usage.js")
   .then(m => { USAGE = m.usage("genecloud", { version: "2" }); USAGE.consent(document.querySelector("#usage-consent")); })
   .catch(() => {});
+// one account for GeneCloud, Régine and Fiole (sign in with the Fiole account); needed to run an analysis
+const ACCOUNT = import("https://gabkrouk.github.io/tools-usage/account.js")
+  .then(m => m.account("genecloud", { mount: document.querySelector("#account") }))
+  .catch(() => null);                 // the account module could not load: the app keeps working
+const BGKEY = "genecloud-bgcustom";   // your own background, kept in the tab while signing in (too long for the URL)
+// the analysis as a link (#genes=…&bg=…): shared, and restored after signing in
+function analysisUrl(genes, bgChoice, o) {
+  const p = new URLSearchParams();
+  p.set("genes", genes.join(","));
+  p.set("bg", bgChoice === "custom" ? "custom" : bgChoice);
+  p.set("text", o.preset); p.set("layers", o.layers.join(",")); p.set("min", o.minGenes); p.set("fdr", o.fdr);
+  p.set("adjust", o.adjust);
+  return location.origin + location.pathname + "#" + p.toString();
+}
 $("#form").addEventListener("submit", async e => {
   e.preventDefault();
   $("#submit").disabled = true;
@@ -127,6 +141,16 @@ $("#form").addEventListener("submit", async e => {
     if (!bg.length) throw new Error("The background list contains no AGI identifier.");
     const o = options();
     if (!o.layers.length) throw new Error("Select at least one kind of concept.");
+    // a free account is needed to run an analysis: the list and options are kept and come back after signing in
+    const acc = await ACCOUNT;
+    if (acc && !acc.signedIn()) {
+      const choice = $("input[name=bg]:checked").value;
+      history.replaceState(null, "", analysisUrl(genes, choice, o));
+      try { if (choice === "custom") sessionStorage.setItem(BGKEY, $("#bgcustom").value); } catch {}
+      acc.ensure();
+      status("Sign in to run the analysis.");
+      return;
+    }
     status('<span class="loader"></span>computing…');
     const need = [];
     if (o.layers.includes("word") || o.layers.includes("phrase")) need.push("wp_" + o.preset);
@@ -383,12 +407,7 @@ $("#dlpng").addEventListener("click", () => {
   img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(CLOUD.svg);
 });
 $("#share").addEventListener("click", async () => {
-  const p = new URLSearchParams();
-  p.set("genes", LAST.genes.join(","));
-  p.set("bg", LAST.bgChoice === "custom" ? "custom" : LAST.bgChoice);
-  p.set("text", LAST.o.preset); p.set("layers", LAST.o.layers.join(",")); p.set("min", LAST.o.minGenes); p.set("fdr", LAST.o.fdr);
-  p.set("adjust", LAST.o.adjust);
-  const url = location.origin + location.pathname + "#" + p.toString();
+  const url = analysisUrl(LAST.genes, LAST.bgChoice, LAST.o);
   history.replaceState(null, "", url);
   try { await navigator.clipboard.writeText(url); status("link copied" + (LAST.bgChoice === "custom" ? " (your own background is not included in the link)" : "")); }
   catch (e) { status("link in the address bar"); }
@@ -396,11 +415,16 @@ $("#share").addEventListener("click", async () => {
 
 // restore an analysis from the URL (#genes=...&bg=ATH1...)
 (async () => {
+  await ACCOUNT;                      // back from signing in: the analysis is put back in the URL first
   if (!location.hash.includes("genes=")) return;
   const p = new URLSearchParams(location.hash.slice(1));
   $("#genes").value = (p.get("genes") || "").split(",").join("\n");
   const set = (n, v) => { const el = $(`input[name=${n}][value="${v}"]`); if (el) el.checked = true; };
   if (p.get("bg") && p.get("bg") !== "custom") set("bg", p.get("bg"));
+  let own = null; try { own = sessionStorage.getItem(BGKEY); sessionStorage.removeItem(BGKEY); } catch {}
+  if (p.get("bg") === "custom" && own) {
+    $("#bgcustom").value = own; set("bg", "custom"); $("input[name=bg][value=custom]")?.dispatchEvent(new Event("change"));
+  }
   if (p.get("text")) set("preset", p.get("text"));
   if (p.get("layers")) { const L = p.get("layers").split(","); $$("input[name=layer]").forEach(x => x.checked = L.includes(x.value)); }
   if (p.get("min")) set("min", p.get("min"));
